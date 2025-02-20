@@ -1,3 +1,11 @@
+#Create  the structure below
+.
+foo-file1.txt
+|
+bar-file2.txt
+|
+baz-file3.txt
+
 # Solution number 1
 
 mkidr foo
