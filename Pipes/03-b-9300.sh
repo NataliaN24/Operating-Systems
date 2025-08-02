@@ -35,3 +35,6 @@
 
 
 cat emails.txt | grep '^[_0-9a-zA-Z][a-zA-Z0-9_.-]*[a-zA-Z0-9_]@[a-z0-9A-Z][a-zA-Z0-9_.-]*.[a-zA-Z]*$' | grep -v '.*[.][.].*'
+
+#or
+$ grep -E '^[a-zA-Z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$' email.txt
