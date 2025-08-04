@@ -14,3 +14,6 @@
  11 else
  12 echo "invalid input"
  13 fi
+
+#Comments
+=~ means is equal to the string on the right hand side
