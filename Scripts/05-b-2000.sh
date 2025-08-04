@@ -10,3 +10,9 @@
 #Second solution
 read -p "Enter your name: " name
 echo "Hello, ${name}"
+
+#or
+  1 #!/bin/bash
+  2
+  3 read name
+  4 echo "Hello $name"
