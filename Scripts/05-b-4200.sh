@@ -23,6 +23,33 @@
 #Изход:
 #The deepest nesting is 2 levels deep.
 
+#better solution
+
+  1 #!/bin/bash
+  2
+  3 if [ $# -ne 1 ]; then
+  4     echo "Error";
+  5     exit 1;
+  6 fi
+  7
+  8 file="$1"
+  9
+ 10 if [ ! -f "$file" ]; then
+ 11     echo "File does not exist"
+ 12     exit 2
+ 13 fi
+ 14
+ 15 grep -o '[{}]' "$file" | awk '{
+ 16         if ($1 == "{") depth ++;
+ 17         else if ($1 == "}") depth --;
+ 18         if (depth > max ) max = depth;
+ 19 }
+ 20 END {
+ 21     print "the deepest nesting is ", max - 1 ,"levels"
+ 22     }'
+ 23
+~
+#or
 
  1 #!/bin/bash
   2
