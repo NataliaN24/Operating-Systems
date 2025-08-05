@@ -23,3 +23,17 @@ who: Извежда списък с всички активни сесии в с
 grep -w "$username": Филтрира само редовете, които съдържат точно името на потребителя.
 
 wc -l: Преброява колко реда съдържа изхода на командата, което означава колко активни сесии има този потребител.
+
+#or
+
+  1 #!/bin/bash
+  2
+  3
+  4 read -p "Hello,enter your name:" name
+  5
+  6 if grep -e "^$name:" /etc/passwd ; then
+  7     sessionCount=$(who | awk '{print $1}' | grep -c "^$name$")
+  8     echo "user $name has  $sessionCount active sessions;"
+  9 else
+ 10      echo "user $name does not exist"
+ 11 fi
