@@ -21,3 +21,26 @@
  14
  15 exitCode=$?
  16 echo  "the code is:" $exitCode
+
+ #or
+
+   1 #!/bin/bash
+  2
+  3 read -p "enter the file name: " filename
+  4 read -p "enter the string : "stringname
+  5
+  6
+  7 if [ ! -f "$filename" ];then
+  8     echo "file doesn't exist"
+  9     exit 1
+ 10 fi
+ 11
+ 12     grep -q "${stringname}" "${filename}"
+ 13 if [ $? -eq 0 ]; then
+ 14     echo "the string was found within file"
+ 15 else
+ 16     echo "the string was not found"
+ 17 fi
+ 18
+ 19 echo "Exit code : $?"
+
