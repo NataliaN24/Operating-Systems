@@ -16,4 +16,18 @@
  14 echo" Files number:$file_count Directories number:$dir_count"
  15
 
+#or
+1 #!/bin/bash
+  2
+  3 echo "enter the name of your directory"
+  4 read dir
+  5
+  6 if [ -d $dir ]; then
+  7     echo "Directory exists "
+  8     numberFiles=$(find "$dir" type -f | wc -l)
+  9     numberDirs=$(find "$dir" type -d  | wc -l)
+ 10      echo "This directory has "$numberFiles" files and "$numberDirs" directories"
+ 11 else
+ 12     echo "Directory doesn't exist";
+ 13 fi
 
