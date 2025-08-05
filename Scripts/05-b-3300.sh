@@ -2,6 +2,34 @@
 #обединява редовете на първите два (man paste), подрежда ги по азбучен ред и
 #резултата записва в третия файл.
 
+#better solution
+ 1 #!/bin/bash
+  2
+  3 echo "Enter the name of the three files:"
+  4     read file1 file2 file3
+  5
+  6 if [ ! -f "$file1" ] && [ -f "$file2" ]; then
+  7     echo "File 1 doesn't exist"
+  8     cat "$file2" | sort > "$file3"
+  9     exit 0
+ 10 fi
+ 11
+ 12 if [ ! -f "$file2" ] && [ -f "$file1" ]; then
+ 13     echo "File 2 doesn't exist"
+ 14     cat "$file1" | sort > "$file3"
+ 15 fi
+ 16
+ 17 if [ ! -f "$file1" ] && [ ! -f "$file2" ]; then
+ 18     echo "Both files don't exist"
+ 19     exit 1;
+ 20 fi
+ 21
+ 22   paste "$file1" "$file2" | sort  > "$file3"
+ 23     echo "Files are merged"
+
+
+#or
+
  1 #!/bin/bash
   2  echo "enter file 1"
   3  read file1
