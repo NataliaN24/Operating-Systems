@@ -13,12 +13,12 @@
   8 number=$2
   9 sum=0
  10
- 11 if [ !-d "$dir" ]; then
+ 11 if [ ! -d "$dir" ]; then
  12     exit 1
  13 fi
  14
  15 for file in "$dir"/*; do
- 16     if [ -f "$file"]; then
+ 16     if [ -f "$file" ]; then
  17         size=$(stat -c%s "$file")
  18         if [ "$size" -gt "$number" ]; then
  19             sum=$((sum + size))
@@ -27,3 +27,6 @@
  22 done
  23
  24 echo " sum is "$sum" bytes"
+ 25
+ 26
+
