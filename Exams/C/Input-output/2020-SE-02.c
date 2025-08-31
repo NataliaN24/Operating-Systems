@@ -1,111 +1,3 @@
-#include <stdlib.h>
-#include <unistd.h>
-#include <err.h>
-#include <errno.h>
-#include <fcntl.h>
-#include <sys/types.h>
-#include <stdint.h>
-#include <sys/stat.h>
-
-int fds[3];
-
-uint16_t read_num(int fd, const char* file_name);
-int open_read(const char* file_name);
-int open_create(const char* file_name);
-void write_safe(int fd, uint16_t num, const char* file_name);
-void close_all(void);
-
-void close_all(void) {
-    int errno_ = errno;
-    for (int i = 0; i < 3; i++) {
-        if (fds[i] >= 0) {
-            close(fds[i]);
-        }
-    }
-
-    errno = errno_;
-}
-
-void write_safe(int fd, uint16_t num, const char* file_name) {
-    int bytes_written;
-    if ((bytes_written = write(fd, &num, sizeof(num))) != sizeof(num)) {
-        if (bytes_written == -1) {
-            err(5, "Could not write to file %s", file_name);
-        } else {
-            errx(5, "Could not write to file %s", file_name);
-        }
-    }
-}
-
-int open_create(const char* file_name) {
-    int fd;
-    if ((fd = open(file_name, O_RDWR | O_CREAT | O_TRUNC, S_IWUSR | S_IRUSR)) == -1) {
-        err(2, "Could not open file %s", file_name);
-    }
-
-    return fd;
-}
-
-int open_read(const char* file_name) {
-    int fd;
-    if ((fd = open(file_name, O_RDONLY)) == -1) {
-        err(2, "Could not open file %s", file_name);
-    }
-
-    return fd;
-}
-
-uint16_t read_num(int fd, const char* file_name) {
-    int bytes_read;
-    uint16_t b;
-
-    if ((bytes_read = read(fd, &b, sizeof(b))) != sizeof(b)) {
-        if (bytes_read == -1) {
-            err(4, "Could not read from file %s", file_name);
-        } else {
-            errx(4, "Could not read from file %s", file_name);
-        }
-    }
-
-    return b;
-}
-
-int main(int argc, char** argv) {
-    if (argc != 3) {
-        errx(1, "Invalid arguments. Usage: %s <SCL> <SDL>", argv[0]);
-    }
-
-    const char *SCL = argv[1], *SDL = argv[2], *result = "result.txt";
-    struct stat s1, s2;
-
-    if (stat(SCL, &s1) == -1 || stat(SDL, &s2) == -1) {
-        err(2, "Could not stat");
-    }
-
-    if (s1.st_size * 8 != (s2.st_size / 2)) {
-        errx(3, "Incosistent file content");
-    }
-
-    fds[0] = open_read(SCL);
-    fds[1] = open_read(SDL);
-    fds[2] = open_create(result);
-
-    int bytes_read;
-    uint8_t b;
-    while ((bytes_read = read(fds[0], &b, sizeof(b))) == sizeof(b)) {
-        for (int i = 7; i >= 0; i--) {
-            uint16_t num = read_num(fds[1], SDL);
-            if ((b >> i) & 1) {
-                write_safe(fds[2], num, result);
-            }
-        }
-    }
-
-    if (bytes_read == -1) {
-        err(4, "Could not read from file %s", SCL);
-    }
-}
-
 //Инженерите от съседната лабораторя работят с комплекти SCL/SDL файлове, напр.
 //input.scl/input.sdl.
 //В SCL файла са записани нива на сигнали (ниско 0 или високо 1), т.е., файлът се третира като състоящ се от битове.
@@ -114,3 +6,52 @@ int main(int argc, char** argv) {
 //Помогнете на колегите си, като напишете програма на C, която да бъде удобен инструмент за
 //        изваждане в нов файл само на тези SDL елементи, които са имали високо ниво в SCL файла,
 //запазвайки наредбата им.
+
+#include <stdio.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <err.h>
+
+int main(int argc, char **argv) {
+    if (argc != 4) errx(1, "Usage: ./main input.scl input.sdl output.bin");
+
+    const char *scl_file = argv[1];
+    const char *sdl_file = argv[2];
+    const char *out_file = argv[3];
+
+    int fd_scl = open(scl_file, O_RDONLY);
+    int fd_sdl = open(sdl_file, O_RDONLY);
+    int fd_out = open(out_file, O_WRONLY | O_CREAT | O_TRUNC, 0666);
+
+    if (fd_scl < 0 || fd_sdl < 0 || fd_out < 0) err(2, "cannot open files");
+
+    uint8_t scl_byte;
+    ssize_t scl_read;
+    uint64_t sdl_index = 0;
+
+    while ((scl_read = read(fd_scl, &scl_byte, 1)) > 0) {
+        for (int bit = 0; bit < 8; bit++) {
+            int level = (scl_byte >> bit) & 1;
+
+            uint16_t sdl_value;
+            if (read(fd_sdl, &sdl_value, sizeof(uint16_t)) != sizeof(uint16_t))
+                errx(3, "SDL file too short for SCL bits");
+
+            if (level) {
+                if (write(fd_out, &sdl_value, sizeof(uint16_t)) != sizeof(uint16_t))
+                    err(4, "write failed");
+            }
+            sdl_index++;
+        }
+    }
+
+    if (scl_read < 0) err(5, "read SCL failed");
+
+    close(fd_scl);
+    close(fd_sdl);
+    close(fd_out);
+
+    return 0;
+}
