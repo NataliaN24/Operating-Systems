@@ -1,101 +1,3 @@
-#include <stdlib.h>
-#include <unistd.h>
-#include <err.h>
-#include <errno.h>
-#include <stdint.h>
-#include <fcntl.h>
-#include <sys/types.h>
-
-int fds[2];
-
-void close_all(void);
-int open_read(const char* file_name);
-int open_creat(const char* file_name);
-uint16_t manchester_encode(uint8_t num);
-void write_safe(int fd, uint16_t num, const char* file_name);
-
-void write_safe(int fd, uint16_t num, const char* file_name) {
-    int bytes_written;
-    if ((bytes_written = write(fd, &num, sizeof(num))) != sizeof(num)) {
-        close_all();
-        if (bytes_written == -1) {
-            err(4, "Could not write to file %s", file_name);
-        } else {
-            errx(4, "Could not write to file %s", file_name);
-        }
-    }
-}
-
-int open_read(const char* file_name) {
-    int fd;
-    if ((fd = open(file_name, O_RDONLY)) == -1) {
-        err(2, "Could not open file %s", file_name);
-    }
-
-    return fd;
-}
-
-int open_creat(const char* file_name) {
-    int fd;
-    if ((fd = open(file_name, O_RDWR | O_CREAT | O_TRUNC, S_IWUSR | S_IRUSR)) == -1) {
-        err(2, "Could not open file %s", file_name);
-    }
-
-    return fd;
-}
-
-void close_all(void) {
-    int errno_ = errno;
-    for (int i = 0; i < 2; i++) {
-        if (fds[i] >= 0) {
-            close(fds[i]);
-        }
-    }
-
-    errno = errno_;
-}
-
-uint16_t manchester_encode(uint8_t num) {
-    uint16_t result = 0;
-    for (int i = 7; i >= 0; i--) {
-        if (num >> i & 1) {
-            result ^= (1 << (2*i +1));
-        } else {
-            result ^= (1 << (2*i));
-        }
-    }
-
-    return result;
-}
-
-
-int main(int argc, char** argv) {
-    if (argc != 3) {
-        errx(1, "Invalid arguments. Usage: %s <input_file> <output_file>", argv[0]);
-    }
-
-    const char *input_file = argv[1], *output_file = argv[2];
-
-    fds[0] = open_read(input_file);
-    fds[1] = open_creat(output_file);
-
-
-    uint8_t num;
-    int bytes_read;
-    while((bytes_read = read(fds[0], &num, sizeof(num))) > 0) {
-        uint16_t result = manchester_encode(num);
-        write_safe(fds[1], result, output_file);
-    }
-
-    if (bytes_read == -1) {
-        close_all();
-        err(3, "Could not read from file %s", input_file);
-    }
-
-    close_all();
-    exit(0);
-}
-
 //Инженерите от съседната лабораторя ползват специализиран хардуер и софтуер за
 //прехвърляне на данни по радио, но за съжаление имат два проблема:
 //• в радио частта: дълги поредици битове само 0 или само 1 чупят преноса;
@@ -113,3 +15,68 @@ int main(int argc, char** argv) {
 //1011 0110 == 0xB6
 //по описаният алгоритъм дават следните 16 бита изход
 //1001 1010 0110 1001 == 0x9A69
+
+#include <stdint.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <err.h>
+
+int main(int argc, char **argv) {
+    if (argc != 3)
+        errx(1, "Usage: ./main input.bin output.bin");
+
+    const char *in_file = argv[1];
+    const char *out_file = argv[2];
+
+    int fd_in = open(in_file, O_RDONLY);
+    if (fd_in < 0) err(2, "Cannot open input file");
+
+    int fd_out = open(out_file, O_WRONLY | O_CREAT | O_TRUNC, 0666);
+    if (fd_out < 0) err(3, "Cannot open output file");
+
+    uint8_t in_byte;
+    uint8_t out_byte = 0;
+    int out_bit_count = 0;
+
+    while (read(fd_in, &in_byte, 1) == 1) {
+        for (int i = 7; i >= 0; i--) {
+            int bit = (in_byte >> i) & 1;
+            // Manchester код: 0 -> 01, 1 -> 10
+            int man_bits = bit ? 0b10 : 0b01;
+
+            for (int j = 1; j >= 0; j--) {
+                out_byte <<= 1;
+                out_byte |= (man_bits >> j) & 1;
+                out_bit_count++;
+
+                if (out_bit_count == 8) {
+                    if (write(fd_out, &out_byte, 1) != 1)
+                        err(4, "write failed");
+                    out_byte = 0;
+                    out_bit_count = 0;
+                }
+            }
+        }
+    }
+
+    // Ако има непълен байт, го допълваме с 0 и записваме
+    if (out_bit_count > 0) {
+        out_byte <<= (8 - out_bit_count);
+        if (write(fd_out, &out_byte, 1) != 1)
+            err(5, "write failed");
+        out_bit_count = 0;
+    }
+
+    // Проверка: ако файлът има нечетен брой байтове, добавяме 0-байт
+    off_t out_size = lseek(fd_out, 0, SEEK_END);
+    if (out_size % 2 != 0) {
+        uint8_t zero = 0;
+        if (write(fd_out, &zero, 1) != 1)
+            err(6, "write failed");
+    }
+
+    close(fd_in);
+    close(fd_out);
+
+    return 0;
+}
