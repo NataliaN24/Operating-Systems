@@ -1,106 +1,75 @@
-#include <stdlib.h>
-#include <unistd.h>
-#include <err.h>
-#include <errno.h>
-#include <string.h>
-#include <stdbool.h>
 #include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
 
-const int BUFF_SIZE = 4096;
-bool BUFF[256];
-char SUB[256];
-
-void write_safe(char c);
-void delete_chars(const char* str, const char* set, int str_length);
-void mark_visited_chars(const char* set);
-void substitute_chars(const char* str, const char* set, int str_length);
-void mark_substitute_chars(const char* set1, const char* set2);
-void substitute_sets(const char* str, const char* set1, const char* set2, int str_length);
-
-void write_safe(char c) {
-    if (write(1, &c, sizeof(c)) != sizeof(c)) {
-        err(3, "Could not write to stdout");
+int main(int argc, char **argv) {
+    if (argc < 2) {
+        fprintf(stderr, "Usage: %s [OPTION] SET1 [SET2]\n", argv[0]);
+        return 1;
     }
-}
 
-void delete_chars(const char* str, const char* set, int str_length) {
-    mark_visited_chars(set);
-    for (int i = 0; i < str_length; i++) {
-        if (BUFF[(int)str[i]] == 0) {
-            write_safe(str[i]);
+    int mode_delete = 0;
+    int mode_squeeze = 0;
+    char *set1 = NULL;
+    char *set2 = NULL;
+
+    if (strcmp(argv[1], "-d") == 0) {
+        mode_delete = 1;
+        if (argc != 3) {
+            fprintf(stderr, "-d requires SET1\n");
+            return 1;
         }
-    }
-}
-
-void substitute_chars(const char* str, const char* set, int str_length) {
-    mark_visited_chars(set);
-    bool WRITTEN[256];
-    for (int i = 0; i < str_length; i++) {
-        if (BUFF[(int)str[i]] == 0) {
-            write_safe(str[i]);
-        } else if (BUFF[(int)str[i]] == 1 && WRITTEN[(int)str[i]] == 0) {
-            WRITTEN[(int)str[i]] = 1;
-            write_safe(str[i]);
+        set1 = argv[2];
+    } else if (strcmp(argv[1], "-s") == 0) {
+        mode_squeeze = 1;
+        if (argc != 3) {
+            fprintf(stderr, "-s requires SET1\n");
+            return 1;
         }
-    }
-}
-
-void substitute_sets(const char* str, const char* set1, const char* set2, int str_length) {
-    mark_visited_chars(set1);
-    mark_substitute_chars(set1, set2);
-    for (int i = 0; i < str_length; i++) {
-        if (BUFF[(int)str[i]] == 0) {
-            write_safe(str[i]);
-        } else if (BUFF[(int)str[i]] == 1) {
-            write_safe(SUB[(int)str[i]]);
-        }
-    }
-}
-
-void mark_visited_chars(const char* set) {
-    int set_length = strlen(set);
-    for (int i = 0; i < set_length; i++) {
-        BUFF[(int)set[i]] = 1;
-    }
-}
-
-
-void mark_substitute_chars(const char* set1, const char* set2) {
-    int set_length = strlen(set1);
-    for (int i = 0; i < set_length; i++) {
-        SUB[(int)set1[i]] = set2[i];
-    }
-}
-
-int main(int argc, char** argv) {
-    if (argc != 3) {
-        errx(1, "Invalid arguments. Usage: %s [OPTION] SET1 [SET2]", argv[0]);
-    }
-
-    char str[BUFF_SIZE];
-    if (read(0, &str, sizeof(str)) == -1) {
-        err(4, "Could not read from stdin");
-    }
-
-    int str_length = strlen(str);
-    char set1[BUFF_SIZE], set2[BUFF_SIZE];
-    if (strcmp(argv[1],"-d") == 0) {
-        strcpy(set1, argv[2]);
-        delete_chars(str, set1, str_length);
-    } else if  (strcmp(argv[1],"-s") == 0) {
-        strcpy(set1, argv[2]);
-        substitute_chars(str, set1, str_length);
+        set1 = argv[2];
     } else {
-        if (strlen(argv[1]) != strlen(argv[2])) {
-            errx(2, "Lenght of SET1 is not equal to length of SET2");
+        if (argc != 3) {
+            fprintf(stderr, "Replacement mode requires SET1 and SET2\n");
+            return 1;
         }
-
-        strcpy(set1, argv[1]);
-        strcpy(set2, argv[2]);
-        substitute_sets(str, set1, set2, str_length);
+        set1 = argv[1];
+        set2 = argv[2];
+        if (strlen(set1) != strlen(set2)) {
+            fprintf(stderr, "SET1 and SET2 must have same length\n");
+            return 1;
+        }
     }
 
-    exit(0);
+    int last_written[256] = {0}; // за -s
+    int c;
+    while ((c = getchar()) != EOF) {
+        unsigned char uc = (unsigned char)c;
+
+        if (mode_delete) {
+            if (strchr(set1, uc)) continue;
+            putchar(uc);
+        } else if (mode_squeeze) {
+            if (strchr(set1, uc)) {
+                if (!last_written[uc]) {
+                    putchar(uc);
+                    last_written[uc] = 1;
+                }
+            } else {
+                putchar(uc);
+                last_written[uc] = 0;
+            }
+        } else {
+            char *p = strchr(set1, uc);
+            if (p) {
+                size_t idx = p - set1;
+                putchar(set2[idx]);
+            } else {
+                putchar(uc);
+            }
+        }
+    }
+
+    return 0;
 }
 
 //Напишете програма на C, която да работи подобно на командата tr, реализирайки
