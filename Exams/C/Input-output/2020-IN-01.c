@@ -1,183 +1,3 @@
-#include <stdlib.h>
-#include <unistd.h>
-#include <err.h>
-#include <errno.h>
-#include <fcntl.h>
-#include <stdint.h>
-
-int fds[3];
-
-typedef struct __attribute__((packed)) {
-    uint32_t magic;
-    uint8_t header_version;
-    uint8_t data_version;
-    uint16_t count;
-    uint32_t _;
-    uint32_t __;
-} header;
-
-typedef struct __attribute__((packed)) {
-    uint16_t offset;
-    uint8_t original_byte;
-    uint8_t new_byte;
-} data_first;
-
-typedef struct __attribute__((packed)) {
-    uint32_t offset;
-    uint16_t original_word;
-    uint16_t new_word;
-} data_second;
-
-void close_all(void);
-int open_read(const char* file_name);
-int open_create(const char* file_name);
-void write_safev1(int fd, uint8_t b, const char* file_name);
-void lseek_safev1(int fd, uint16_t offset, int whence);
-void write_safev2(int fd, uint16_t b, const char* file_name);
-void lseek_safev2(int fd, uint32_t offset, int whence);
-
-int open_read(const char* file_name) {
-    int fd;
-    if ((fd = open(file_name, O_RDONLY)) == -1) {
-        err(2, "Could not open file %s", file_name);
-    }
-
-    return fd;
-}
-
-void close_all(void) {
-    int errno_ = errno;
-    for (int i = 0; i < 3; i++) {
-        if (fds[i] >= 0) {
-            close(fds[i]);
-        }
-    }
-
-    errno = errno_;
-}
-
-int open_create(const char* file_name) {
-    int fd;
-    if ((fd = open(file_name, O_RDWR | O_CREAT | O_TRUNC, S_IWUSR | S_IRUSR)) == -1) {
-        err(2, "Could not open file %s", file_name);
-    }
-
-    return fd;
-}
-
-void write_safev1(int fd, uint8_t b, const char* file_name) {
-    if (write(fd, &b, sizeof(b)) != sizeof(b)) {
-        close_all();
-        errx(6, "Could not write to file %s", file_name);
-    }
-}
-
-void write_safev2(int fd, uint16_t b, const char* file_name) {
-    if (write(fd, &b, sizeof(b)) != sizeof(b)) {
-        close_all();
-        errx(6, "Could not write to file %s", file_name);
-    }
-}
-
-void lseek_safev1(int fd, uint16_t offset, int whence) {
-    if (lseek(fd, offset, whence) == -1) {
-        close_all();
-        err(7, "Could not lseek");
-    }
-}
-
-void lseek_safev2(int fd, uint32_t offset, int whence) {
-    if (lseek(fd, offset, whence) == -1) {
-        close_all();
-        err(7, "Could not lseek");
-    }
-}
-
-int main(int argc, char** argv) {
-    if (argc != 4) {
-        errx(1, "Invalid argumetns. Usage: %s <patch> <f1> <f2>", argv[0]);
-    }
-
-    const char *patch = argv[1], *f1 = argv[2], *f2 = argv[3];
-    fds[0] = open_read(patch);
-    fds[1] = open_read(f1);
-    fds[2] = open_create(f2);
-
-    header h;
-    if (read(fds[0], &h, sizeof(h)) == -1) {
-        close_all();
-        err(3, "Could not read from file %s", patch);
-    }
-
-    if (h.magic != 0xEFBEADDE || h.header_version != 0x001) {
-        close_all();
-        errx(4, "Invalid header");
-    }
-
-    int bytes_read;
-    if (h.data_version == 0x00) {
-        uint8_t original_byte;
-        while((bytes_read = read(fds[1], &original_byte, sizeof(original_byte))) > 0) {
-            write_safev1(fds[2], original_byte, f2);
-        }
-
-        if (bytes_read == -1) {
-            close_all();
-            err(5, "Could not read from file %s", f1);
-        }
-
-        data_first data;
-        while ((bytes_read = read(fds[0], &data, sizeof(data))) > 0) {
-            lseek_safev1(fds[2], data.offset, SEEK_SET);
-            if (read(fds[2], &original_byte, sizeof(original_byte)) == -1) {
-                close_all();
-                err(5, "Could not read from file %s", f1);
-            }
-
-            if (original_byte != data.original_byte) {
-                close_all();
-                errx(8, "Invalid patch content");
-            }
-
-            lseek_safev1(fds[2], data.offset, SEEK_SET);
-            write_safev1(fds[2], data.new_byte, f2);
-        }
-    }
-    else if (h.data_version == 0x01){
-        uint16_t original_word;
-        while((bytes_read = read(fds[1], &original_word, sizeof(original_word))) > 0) {
-            write_safev2(fds[2], original_word, f2);
-        }
-
-        if (bytes_read == -1) {
-            close_all();
-            err(5, "Could not read from file %s", f1);
-        }
-
-        data_second data;
-        while ((bytes_read = read(fds[0], &data, sizeof(data))) > 0) {
-            lseek_safev2(fds[2], data.offset, SEEK_SET);
-            if (read(fds[2], &original_word, sizeof(original_word)) == -1) {
-                close_all();
-                err(5, "Could not read from file %s", f1);
-            }
-
-            if (original_word != data.original_word) {
-                close_all();
-                errx(8, "Invalid patch content");
-            }
-
-            lseek_safev2(fds[2], data.offset, SEEK_SET);
-            write_safev2(fds[2], data.new_word, f2);
-        }
-    } else {
-        errx(8, "Invalid data version")
-    }
-
-    close_all();
-    exit(0);
-}
-
 //Напишете програма на C, която приема три параметъра – имена на двоични файлове.
 //Примерно извикване:
 //$ ./main patch.bin f1.bin f2.bin
@@ -214,3 +34,108 @@ int main(int argc, char** argv) {
 //Наредените тройки в секцията за данни на файла patch.bin да се обработват последователно.
 //Обърнете внимание на обработката за грешки и съобщенията към потребителя – искаме програмата
 //да бъде удобен и валиден инструмент.
+
+#include <stdio.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <err.h>
+
+#define PATCH_MAGIC 0xEFBEADDE
+
+int main(int argc, char **argv) {
+    if (argc != 4) {
+        errx(1, "Usage: %s patch.bin f1.bin f2.bin", argv[0]);
+    }
+
+    const char *patch_file = argv[1];
+    const char *f1_file = argv[2];
+    const char *f2_file = argv[3];
+
+    int fd_patch = open(patch_file, O_RDONLY);
+    if (fd_patch < 0) err(2, "Cannot open %s", patch_file);
+
+    // Четем хедъра (16 байта)
+    uint32_t magic;
+    uint8_t header_ver;
+    uint8_t data_ver;
+    uint16_t count;
+    uint32_t reserved1, reserved2;
+
+    if (read(fd_patch, &magic, 4) != 4) err(3, "Failed to read magic");
+    if (magic != PATCH_MAGIC) errx(4, "Invalid magic in patch file");
+
+    if (read(fd_patch, &header_ver, 1) != 1) err(5, "Failed to read header version");
+    if (header_ver != 0x01) errx(6, "Unsupported header version");
+
+    if (read(fd_patch, &data_ver, 1) != 1) err(7, "Failed to read data version");
+    if (read(fd_patch, &count, 2) != 2) err(8, "Failed to read count");
+    if (read(fd_patch, &reserved1, 4) != 4) err(9, "Failed to read reserved1");
+    if (read(fd_patch, &reserved2, 4) != 4) err(10, "Failed to read reserved2");
+
+    // Отваряме f1 и f2
+    int fd1 = open(f1_file, O_RDONLY);
+    if (fd1 < 0) err(11, "Cannot open %s", f1_file);
+    int fd2 = open(f2_file, O_WRONLY | O_CREAT | O_TRUNC, 0666);
+    if (fd2 < 0) err(12, "Cannot create %s", f2_file);
+
+    // Копираме f1 -> f2
+    char buf[4096];
+    ssize_t r;
+    while ((r = read(fd1, buf, sizeof(buf))) > 0) {
+        if (write(fd2, buf, r) != r) err(13, "Write error");
+    }
+    if (r < 0) err(14, "Read error during copy");
+
+    // Сега прилагаме пача
+    off_t fsize;
+    if ((fsize = lseek(fd2, 0, SEEK_END)) < 0) err(15, "lseek failed on f2");
+    lseek(fd2, 0, SEEK_SET); // за да можем да пишем по offset
+
+    for (uint16_t i = 0; i < count; i++) {
+        if (data_ver == 0x00) {
+            uint16_t offset;
+            uint8_t original, newbyte;
+            if (read(fd_patch, &offset, 2) != 2) err(16, "Read patch data failed");
+            if (read(fd_patch, &original, 1) != 1) err(17, "Read patch data failed");
+            if (read(fd_patch, &newbyte, 1) != 1) err(18, "Read patch data failed");
+
+            off_t pos = (off_t)offset;
+            if (pos >= fsize) errx(19, "Offset out of range");
+
+            uint8_t cur;
+            if (lseek(fd2, pos, SEEK_SET) < 0) err(20, "lseek failed");
+            if (read(fd2, &cur, 1) != 1) err(21, "Read f2 failed");
+            if (cur != original) errx(22, "Original byte mismatch at offset %u", offset);
+
+            if (lseek(fd2, pos, SEEK_SET) < 0) err(23, "lseek failed");
+            if (write(fd2, &newbyte, 1) != 1) err(24, "Write patch failed");
+        } else if (data_ver == 0x01) {
+            uint32_t offset;
+            uint16_t original, newword;
+            if (read(fd_patch, &offset, 4) != 4) err(25, "Read patch data failed");
+            if (read(fd_patch, &original, 2) != 2) err(26, "Read patch data failed");
+            if (read(fd_patch, &newword, 2) != 2) err(27, "Read patch data failed");
+
+            off_t pos = (off_t)offset * 2; // защото е word
+            if (pos + 1 >= fsize) errx(28, "Offset out of range");
+
+            uint16_t cur;
+            if (lseek(fd2, pos, SEEK_SET) < 0) err(29, "lseek failed");
+            if (read(fd2, &cur, 2) != 2) err(30, "Read f2 failed");
+            if (cur != original) errx(31, "Original word mismatch at offset %u", offset);
+
+            if (lseek(fd2, pos, SEEK_SET) < 0) err(32, "lseek failed");
+            if (write(fd2, &newword, 2) != 2) err(33, "Write patch failed");
+        } else {
+            errx(34, "Unsupported data version");
+        }
+    }
+
+    close(fd_patch);
+    close(fd1);
+    close(fd2);
+
+    return 0;
+}
