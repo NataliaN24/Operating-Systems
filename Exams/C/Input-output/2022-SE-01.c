@@ -1,3 +1,142 @@
+//Напишете програма на C, която приема два позиционни аргумента – имена на
+//двоични файлове. Примерно извикване: ./main data.bin comparator.bin
+//        Файлът data.bin се състои от две секции – 8 байтов хедър и данни. Структурата на хедъра е:
+//• uint32_t, magic – магическа стойност 0x21796F4A, която дефинира, че файлът следва тази
+//        спецификация;
+//• uint32_t, count – описва броя на елементите в секцията с данни.
+//Секцията за данни се състои от елементи – uint64_t числа.
+//Файлът comparator.bin се състои от две секции – 16 байтов хедър и данни. Структурата на хедъра
+//        е:
+//• uint32_t, magic1 – магическа стойност 0xAFBC7A37;
+//• uint16_t, magic2 – магическа стойност 0x1C27;
+//• комбинацията от горните две magic числа дефинира, че файлът следва тази спецификация;
+//• uint16_t, reserved – не се използва;
+//• uint64_t, count – описва броя на елементите в секциата с данни.
+//Секцията за данни се състои от елементи – наредени 6-торки:
+//• uint16_t, type – възможни стойности: 0 или 1;
+//• 3 бр. uint16_t, reserved – възможни стойности за всяко: 0;
+//• uint32_t, offset1;
+//• uint32_t, offset2.
+//Двете числа offset дефинират отместване (спрямо N0) в брой елементи за data.bin; type дефинира
+//операция за сравнение:
+//• 0: “по-малко”;
+//• 1: “по-голямо”.
+//Елементите в comparator.bin дефинират правила от вида:
+//• “елементът на offset1” трябва да е “по-малък” от “елементът на offset2”;
+//• “елементът на offset1” трябва да е “по-голям” от “елементът на offset2”.
+//Програмата трябва да интепретира по ред дефинираните правила в comparator.bin и ако правилото
+//не е изпълнено, да разменя in-place елементите на съответните отмествания. Елементи, които са
+//равни, няма нужда да се разменят.
+#include <stdint.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <err.h>
+
+#define DATA_MAGIC 0x21796F4A
+#define COMP_MAGIC1 0xAFBC7A37
+#define COMP_MAGIC2 0x1C27
+
+struct comparator_rule {
+    uint16_t type;
+    uint16_t reserved[3];
+    uint32_t offset1;
+    uint32_t offset2;
+};
+
+int main(int argc, char **argv) {
+    if (argc != 3)
+        errx(1, "Usage: %s data.bin comparator.bin", argv[0]);
+
+    const char *data_file = argv[1];
+    const char *comp_file = argv[2];
+
+    int fd_data = open(data_file, O_RDWR);
+    if (fd_data < 0) err(2, "Cannot open data file");
+
+    int fd_comp = open(comp_file, O_RDONLY);
+    if (fd_comp < 0) err(3, "Cannot open comparator file");
+
+    // Четене на хедъра на data.bin
+    uint32_t data_magic, data_count;
+    if (read(fd_data, &data_magic, sizeof(data_magic)) != sizeof(data_magic))
+        err(4, "Cannot read data magic");
+    if (data_magic != DATA_MAGIC)
+        errx(5, "Invalid data magic");
+
+    if (read(fd_data, &data_count, sizeof(data_count)) != sizeof(data_count))
+        err(6, "Cannot read data count");
+
+    // Четене на хедъра на comparator.bin
+    uint32_t comp_magic1;
+    uint16_t comp_magic2, comp_reserved;
+    uint64_t comp_count;
+
+    if (read(fd_comp, &comp_magic1, sizeof(comp_magic1)) != sizeof(comp_magic1))
+        err(7, "Cannot read comparator magic1");
+    if (comp_magic1 != COMP_MAGIC1)
+        errx(8, "Invalid comparator magic1");
+
+    if (read(fd_comp, &comp_magic2, sizeof(comp_magic2)) != sizeof(comp_magic2))
+        err(9, "Cannot read comparator magic2");
+    if (comp_magic2 != COMP_MAGIC2)
+        errx(10, "Invalid comparator magic2");
+
+    if (read(fd_comp, &comp_reserved, sizeof(comp_reserved)) != sizeof(comp_reserved))
+        err(11, "Cannot read comparator reserved");
+
+    if (read(fd_comp, &comp_count, sizeof(comp_count)) != sizeof(comp_count))
+        err(12, "Cannot read comparator count");
+
+    // Четене и прилагане на правилата
+    for (uint64_t i = 0; i < comp_count; i++) {
+        struct comparator_rule rule;
+        if (read(fd_comp, &rule, sizeof(rule)) != sizeof(rule))
+            err(13, "Cannot read comparator rule");
+
+        // Проверка дали отместванията са валидни
+        if (rule.offset1 >= data_count || rule.offset2 >= data_count)
+            errx(14, "Invalid offsets in comparator rule");
+
+        uint64_t val1, val2;
+
+        // Четене на елементите от data.bin
+        if (lseek(fd_data, 8 + rule.offset1 * sizeof(uint64_t), SEEK_SET) < 0)
+            err(15, "lseek error for offset1");
+        if (read(fd_data, &val1, sizeof(val1)) != sizeof(val1))
+            err(16, "Cannot read data element 1");
+
+        if (lseek(fd_data, 8 + rule.offset2 * sizeof(uint64_t), SEEK_SET) < 0)
+            err(17, "lseek error for offset2");
+        if (read(fd_data, &val2, sizeof(val2)) != sizeof(val2))
+            err(18, "Cannot read data element 2");
+
+        // Прилагане на правилото
+        int swap_needed = 0;
+        if (rule.type == 0 && val1 >= val2) swap_needed = 1; // по-малко
+        else if (rule.type == 1 && val1 <= val2) swap_needed = 1; // по-голямо
+
+        if (swap_needed) {
+            // Размяна in-place
+            if (lseek(fd_data, 8 + rule.offset1 * sizeof(uint64_t), SEEK_SET) < 0)
+                err(19, "lseek error for write offset1");
+            if (write(fd_data, &val2, sizeof(val2)) != sizeof(val2))
+                err(20, "Cannot write swapped val2");
+
+            if (lseek(fd_data, 8 + rule.offset2 * sizeof(uint64_t), SEEK_SET) < 0)
+                err(21, "lseek error for write offset2");
+            if (write(fd_data, &val1, sizeof(val1)) != sizeof(val1))
+                err(22, "Cannot write swapped val1");
+        }
+    }
+
+    close(fd_data);
+    close(fd_comp);
+
+    return 0;
+}
+
+
+//OR
 #include <stdlib.h>
 #include <unistd.h>
 #include <err.h>
@@ -191,34 +330,4 @@ int main(int argc, char** argv) {
     close_all();
     exit(0);
 }
-
-//Напишете програма на C, която приема два позиционни аргумента – имена на
-//двоични файлове. Примерно извикване: ./main data.bin comparator.bin
-//        Файлът data.bin се състои от две секции – 8 байтов хедър и данни. Структурата на хедъра е:
-//• uint32_t, magic – магическа стойност 0x21796F4A, която дефинира, че файлът следва тази
-//        спецификация;
-//• uint32_t, count – описва броя на елементите в секцията с данни.
-//Секцията за данни се състои от елементи – uint64_t числа.
-//Файлът comparator.bin се състои от две секции – 16 байтов хедър и данни. Структурата на хедъра
-//        е:
-//• uint32_t, magic1 – магическа стойност 0xAFBC7A37;
-//• uint16_t, magic2 – магическа стойност 0x1C27;
-//• комбинацията от горните две magic числа дефинира, че файлът следва тази спецификация;
-//• uint16_t, reserved – не се използва;
-//• uint64_t, count – описва броя на елементите в секциата с данни.
-//Секцията за данни се състои от елементи – наредени 6-торки:
-//• uint16_t, type – възможни стойности: 0 или 1;
-//• 3 бр. uint16_t, reserved – възможни стойности за всяко: 0;
-//• uint32_t, offset1;
-//• uint32_t, offset2.
-//Двете числа offset дефинират отместване (спрямо N0) в брой елементи за data.bin; type дефинира
-//операция за сравнение:
-//• 0: “по-малко”;
-//• 1: “по-голямо”.
-//Елементите в comparator.bin дефинират правила от вида:
-//• “елементът на offset1” трябва да е “по-малък” от “елементът на offset2”;
-//• “елементът на offset1” трябва да е “по-голям” от “елементът на offset2”.
-//Програмата трябва да интепретира по ред дефинираните правила в comparator.bin и ако правилото
-//не е изпълнено, да разменя in-place елементите на съответните отмествания. Елементи, които са
-//равни, няма нужда да се разменят.
 
