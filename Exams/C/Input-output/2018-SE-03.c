@@ -1,159 +1,3 @@
-#include <stdlib.h>
-#include <unistd.h>
-#include <stdint.h>
-#include <err.h>
-#include <errno.h>
-#include <string.h>
-#include <stdio.h>
-
-const int MAX_LINE_LENGTH = 4096;
-
-void write_safe(char c);
-void print_characters(const char* str, const char* option);
-void check_char_options(const char* options);
-void print_fields(const char* str, char delimeter, const char* option);
-
-void write_safe(char c) {
-    if (write(1, &c, sizeof(c)) != sizeof(c)) {
-        err(4, "Could not write to stdin.");
-    }
-}
-
-void print_characters(const char* str, const char* option) {
-    int str_len = strlen(str) - 1; //exluce \n
-    int option_len = strlen(option);
-
-    if (option_len == 1) {
-        int index = (int)(option[0] - '1');
-        if (index < str_len) {
-            write_safe(str[index]);
-        }
-    } else if (option_len == 3) {
-        int start = (int)(option[0] - '1');
-        if (start < str_len) {
-            int end = (int)(option[2] - '1');
-            if (end >= str_len) {
-                end = str_len - 1;
-            }
-            for (int i = start; i <= end; i ++) {
-                write_safe(str[i]);
-            }
-        }
-    } else {
-        errx(1, "Invalid option");
-    }
-
-
-    write_safe('\n');
-}
-
-void print_fields(const char* str, char delimeter, const char* option) {
-    int str_len = strlen(str) - 1, index = 0;
-    int option_len = strlen(option);
-
-    if (option_len == 1) {
-        int pos = (int)(option[0] - '0');
-        while(index < str_len) {
-            if (str[index] == delimeter) {
-                pos--;
-                if (pos == 1) {
-                    index++;
-                    while(index < str_len && str[index] != delimeter) {
-                        write_safe(str[index]);
-                        index++;
-                    }
-                }
-            }
-            index++;
-        }
-    } else if (option_len == 3) {
-        int pos = (int)(option[0] - '0');
-        while(index < str_len) {
-            if (str[index] == delimeter) {
-                pos--;
-                if (pos == 1) {
-                    index++;
-                    int end = (int)(option[2] - '0');
-                    while(index < str_len && pos < end) {
-                        if(str[index] == delimeter) {
-                            pos++;
-                            if (pos == end) {
-                                break;
-                            }
-                        }
-
-                        write_safe(str[index]);
-                        index++;
-                    }
-                }
-            }
-            index++;
-        }
-    } else {
-        errx(1, "Invalid option");
-    }
-
-    write_safe('\n');
-}
-
-void check_char_options(const char* options) {
-    int opt_len = strlen(options);
-    if (opt_len != 1 && opt_len != 3) {
-        errx(8, "Invalid option");
-    }
-
-    size_t start = options[0], end;
-
-    if (options[0] == '0') {
-        errx(5, "byte/characters are numbered from 1");
-    }
-    if (opt_len == 3 && (start > (end = options[2]))) {
-        errx(4, "Invalid decreasing range");
-    }
-}
-
-int main(int argc, char** argv) {
-    if (argc < 4 || argc > 5) {
-        errx(1, "Invalid arguments.");
-    }
-
-    char delimeter;
-    char *options;
-    char option;
-
-    if (strcmp(argv[1], "-c") == 0) {
-        options = argv[2];
-        check_char_options(argv[2]);
-        option = 'c';
-    } else if (strcmp(argv[1], "-d") == 0) {
-        delimeter = argv[2][0];
-        if (strcmp(argv[3], "-f") != 0) {
-            errx(6, "Invalid option");
-        }
-        option = 'd';
-        options = argv[4];
-    } else {
-        errx(2, "Invalid option.");
-    }
-
-    char buff[4096];
-    int bytes_read;
-    while ((bytes_read = read(0, buff, sizeof(buff))) > 0) {
-        buff[bytes_read] = '\0';
-        if (option == 'c') {
-            print_characters(buff, options);
-        } else if (option == 'd') {
-            print_fields(buff, delimeter, options);
-        }
-    }
-
-    if (bytes_read == -1) {
-        err(9, "Could not read from stdin");
-    }
-
-    exit(0);
-}
-
 //Напишете програма на C, която да работи подобно на командата cut, реализирайки
 //само следната функционалност:
 //• програмата трябва да чете текст от стандартния вход и да извежда избраната част от всеки
@@ -172,3 +16,98 @@ int main(int argc, char** argv) {
 //        от същия разделител.
 //• ако някой ред няма достатъчно символи/полета, за него програмата трябва да изведе каквото
 //(докъдето) е възможно (или дори празен ред).
+
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+
+#define MAX_LINE 4096
+
+// Парсираме диапазон N или N-M без sscanf
+void parse_range(const char *s, int *start, int *end) {
+    int i = 0;
+    *start = 0;
+    *end = 0;
+
+    // Превръщаме първото число
+    while (s[i] >= '0' && s[i] <= '9') {
+        *start = *start * 10 + (s[i] - '0');
+        i++;
+    }
+
+    if (s[i] == '-') {
+        i++;
+        while (s[i] >= '0' && s[i] <= '9') {
+            *end = *end * 10 + (s[i] - '0');
+            i++;
+        }
+    } else {
+        *end = *start;
+    }
+}
+
+// Режим по символи
+void cut_chars(const char *range_str) {
+    int start, end;
+    parse_range(range_str, &start, &end);
+
+    char line[MAX_LINE];
+    while (fgets(line, sizeof(line), stdin)) {
+        int len = strlen(line);
+        if (line[len - 1] == '\n') len--; // махаме newline
+        int i;
+        for (i = start - 1; i < len && i < end; i++) {
+            putchar(line[i]);
+        }
+        putchar('\n');
+    }
+}
+
+// Режим по полета
+void cut_fields(char sep, const char *range_str) {
+    int start, end;
+    parse_range(range_str, &start, &end);
+
+    char line[MAX_LINE];
+    while (fgets(line, sizeof(line), stdin)) {
+        line[strcspn(line, "\n")] = 0; // премахваме newline
+        char *fields[256];
+        int count = 0;
+        char *token = strtok(line, &sep);
+        while (token && count < 256) {
+            fields[count++] = token;
+            token = strtok(NULL, &sep);
+        }
+
+        int i;
+        for (i = start - 1; i < count && i < end; i++) {
+            if (i > start - 1) putchar(sep);
+            fputs(fields[i], stdout);
+        }
+        putchar('\n');
+    }
+}
+
+int main(int argc, char **argv) {
+    if (argc < 3) {
+        fprintf(stderr, "Usage:\n");
+        fprintf(stderr, "%s -c N[-M]\n", argv[0]);
+        fprintf(stderr, "%s -d SEP -f N[-M]\n", argv[0]);
+        return 1;
+    }
+
+    if (strcmp(argv[1], "-c") == 0) {
+        cut_chars(argv[2]);
+    } else if (strcmp(argv[1], "-d") == 0) {
+        if (argc != 5 || strcmp(argv[3], "-f") != 0) {
+            fprintf(stderr, "Usage: %s -d SEP -f N[-M]\n", argv[0]);
+            return 1;
+        }
+        cut_fields(argv[2][0], argv[4]);
+    } else {
+        fprintf(stderr, "Unknown option %s\n", argv[1]);
+        return 1;
+    }
+
+    return 0;
+}
