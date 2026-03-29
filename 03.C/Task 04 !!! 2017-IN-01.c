@@ -95,7 +95,7 @@ int main(int argc, const char* argv[])
         errx(3, "Inconsistent files: idx file size is not divisible by 4");
     }
 
-    uint16_t outOffset = 0;
+    uint16_t outOffset = 0;  //Текущата позиция в f2.dat, на която ще започне следващият записан низ.
     ssize_t recordsCount = f1IdxSize / 4;
 
     for (ssize_t i = 0; i < recordsCount; i++)
