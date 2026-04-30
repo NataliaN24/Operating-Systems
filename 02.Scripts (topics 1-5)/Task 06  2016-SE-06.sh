@@ -10,6 +10,8 @@ if [[ ! -e $1 ]]; then
   exit 2;
 fi
 
+tempFile=$(mktemp)
+
 cut -d ' ' -f4- "${1}" | sort > tempFile    #from 4 th col till the end
 i=0
 while read line
