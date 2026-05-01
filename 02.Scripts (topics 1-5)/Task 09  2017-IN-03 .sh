@@ -18,7 +18,7 @@ do
     else
     continue
   fi
-done < <(cut -d ':' -f6 /etc/passwd)
+done < <(cut -d ':' -f1,6 /etc/passwd)
 
 sort -nr "${tempFile}" | head -n1
 rm -f "${tempFile}
