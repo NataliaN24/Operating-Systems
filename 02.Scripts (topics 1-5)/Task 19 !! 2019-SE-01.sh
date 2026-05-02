@@ -21,42 +21,37 @@ done < "$tmp" | sort -n | uniq
 
 #second script
 #!/bin/bash
-set -euo pipefail
 
-tmp="$(mktemp)"
-trap 'rm -f "$tmp"' EXIT
+max_sum=-1
+min_num=""
 
-# 1) Вземаме само редове, които са цели числа
-grep -E '^-?[0-9]+$' > "$tmp" || true
-[[ -s "$tmp" ]] || exit 0
+while IFS= read -r line; do
 
-# 2) Намираме maxSum = максималната сума на цифрите
-maxSum=0
-while IFS= read -r n; do
-  abs=$(echo "$n" | sed 's/^-//')
+    # само цели числа
+    if ! [[ "$line" =~ ^-?[0-9]+$ ]]; then
+        continue
+    fi
 
-  # Превръщаме "123" -> "1\n2\n3" -> "1+2+3" -> 6
-  sum=$(echo "$abs" \
-        | sed 's/./&\n/g' \
-        | paste -sd+ - \
-        | bc)
+    num="$line"
+    abs=$(echo "$line" | sed 's/-//')  # махаме минуса
 
-  if (( sum > maxSum )); then
-    maxSum="$sum"
-  fi
-done < "$tmp"
+    sum=0
+    tmp="$abs"
 
-# 3) Печатаме всички числа със sumDigits == maxSum,
-#    после взимаме най-малкото уникално
-while IFS= read -r n; do
-  abs=$(echo "$n" | sed 's/^-//')
+    # взимаме цифра по цифра отляво
+    while [[ -n "$tmp" ]]; do
+        digit=$(echo "$tmp" | cut -c1)
+        sum=$((sum + digit))
+        tmp=$(echo "$tmp" | cut -c2-)
+    done
 
-  sum=$(echo "$abs" \
-        | sed 's/./&\n/g' \
-        | paste -sd+ - \
-        | bc)
+    if [[ $sum -gt $max_sum ]]; then
+        max_sum=$sum
+        min_num="$num"
+    elif [[ $sum -eq $max_sum && "$num" -lt "$min_num" ]]; then
+        min_num="$num"
+    fi
 
-  if (( sum == maxSum )); then
-    echo "$n"
-  fi
-done < "$tmp" | sort -n | uniq | head -n 1
+done
+
+echo "$min_num"
