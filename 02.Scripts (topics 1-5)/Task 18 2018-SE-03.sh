@@ -17,11 +17,11 @@ do
   rest=$(echo "$line" | cut -d ',' -f2-)
   found=0
 
-  while IFS= read -r existing
+  while IFS= read -r existing; do
   
    old_id=$(echo "$existing" | cut -d ',' -f1)
    old_rest=$(echo "$existing" | cut -d ',' -f2-)
-  do
+  
     if [[ "$rest" == "$old_rest" ]];then
     found=1
     if [[ "$id" -lt "$old_id" ]];then
