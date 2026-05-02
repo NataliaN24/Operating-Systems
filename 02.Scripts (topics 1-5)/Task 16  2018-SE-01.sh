@@ -1,30 +1,25 @@
 #!/bin/bash
 
 if [[ $# -ne 1 ]]; then
-  echo "1 argument needed" >&2
-  exit 1
+    echo "Usage: $0 LOGDIR"
+    exit 1
 fi
 
-LOGDIR="${1}"
+LOGDIR="$1"
+TMP="temp.txt"
 
-if [[ ! -d "$LOGDIR" ]]; then
-  echo "Error: '$LOGDIR' is not a directory" >&2
-  exit 2
-fi
+# събираме всички friend + lines
+find "$LOGDIR" -type f | while read file; do
+    friend=$(basename "$(dirname "$file"))
+    lines=$(cat "$file" | wc -l)
 
-#find *.txt files
-#print0  will print the path to this txt file
+    echo "$friend $lines" >> "$TMP"
+done
 
-find "$LOGDIR" -type f -name "*.txt" -print0 | xargs -0 wc -l 
-| awk '{ 
-        lines = $1 
-        n=split($2,parts,"/")   # n=size  parts is the array where we store the path
-        friend=parts[n-1]      # friend's name is the last part of the array
+# работим върху temp файла
+awk '{ sum[$1] += $2 } END { for (f in sum) print sum[f], f }' "$TMP" |
+sort -rn |
+head -n 10
 
-        sum[friend] +=lines
-        }
-        END {
-          for (f in sum)
-            print sum[f],f
-            }'
-   | sort -nr | head -n 10 | awk '{print $2,$1}'
+# трием temp файла
+rm "$TMP"
