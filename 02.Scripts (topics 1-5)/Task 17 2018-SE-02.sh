@@ -22,7 +22,7 @@ num=1
 
 while IFS= read -r line;
 do
-  name=$(echo "${line}" | cut -d ':' -f1 | cut -d ' ' -f1,2)
+  name=$(echo "${line}" | cut -d : -f1| tr -s ' ' | cut -d ' ' -f1,2)
 
   # ако го няма в dict.txt → добавяме
   if ! grep -E -q "^${name} "${dir}/dict.txt"
