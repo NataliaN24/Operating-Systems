@@ -1,99 +1,82 @@
 #!/bin/bash
 
-# 1) Проверки за аргументи
 if [[ $# -ne 2 ]]; then
-  exit 1
+    echo "Usage: $0 SRC DST"
+    exit 1
 fi
 
-src=$1
-dst=$2
+src="$1"
+dst="$2"
 
-# 2) SRC трябва да е директория
 if [[ ! -d "$src" ]]; then
-  exit 1
+    echo "SRC is not directory"
+    exit 1
 fi
 
 if [[ -e "$dst" ]]; then
-  exit 1
+    echo "DST already exists"
+    exit 1
 fi
 
-mkdir -p "$dst/images" "$dst/by-date" "$dst/by-album" "$dst/by-title"
+mkdir -p "$dst/images"
 
-# -------- помощни функции --------
+find "$src" -type f -name "*.jpg" | while read -r file; do
 
-# Почиства низ: trim + collapse multiple spaces -> single space
+    filename=$(basename "$file")
 
-clean() 
-{
-  # trim: маха leading/trailing spaces
-  # collapse: превръща поредици от spaces в един space
-   echo "$1" | sed -E 's/^[[:space:]]+//;s/[[:space:]]+$//;s/[[:space:]]+/ /g'
-}
+    # махаме .jpg
+    name="${filename%.jpg}"
 
-# Взима последния елемент в скоби
-get_album(){
-  raw="$1"
-  last=$(echo "$raw" | grep -oE '\([^)]*\' | tail -n 1)
+    # title
+    title=$(echo "$name" |
+        sed -E 's/\([^)]*\)//g' |
+        tr -s ' ' |
+        sed -E 's/^ //; s/ $//')
 
- if [[ -z "$last"]];then
-    echo "misc"
-    return 
-fi
+    # album
+    album=$(echo "$name" |
+        grep -o '([^)]*)' |
+        tail -n 1 |
+        tr -d '()' |
+        tr -s ' ' |
+        sed -E 's/^ //; s/ $//')
 
-last=$(echo "$last" | sed 's/^(\(.*\))$/\1/' #1 means to replace it with what's inside the brackets
-last=$(clean "$last")
+    if [[ -z "$album" ]]; then
+        album="misc"
+    fi
 
-if [[ -z "$last"]];then
-  echo "misc"
-else
-  echo "$last"
-fi
-}
-# Махаме всички (...) и чистим
-get_title()
-{
-  raw="$1"
-  title=$(echo "$raw" | sed -E 's/([^)]*)//'
-  clean "$title"
-}
-get_date()
-{
-  file="$1"
-  stat -c '%y' "$file" | cut -d ' ' -f1
-}
+    # date
+    date=$(stat -c '%y' "$file" | cut -d ' ' -f1)
 
-get_hash(){
-  file="$1"
-  sha256sum "$file" | cut -c1-16
-}
+    # hash
+    hash=$(sha256sum "$file" | cut -c1-16)
 
-while IFS= read -r -d '' file;do
-  base=$(basename "$file")
-  raw="${base%.jpg}"
-  title=$(get_title,"$raw")
-  album=$(get_album,"$raw")
-  datev=$(get_date "$file")
-  hash=$(get_hash16 "$file")
+    # копие на файла
+    cp "$file" "$dst/images/${hash}.jpg"
 
-  img_path="$dst/images/$hash.jpg"
-  # копираме файла
-  cp "$file" "$img_path"
-  
-   # генерираме 5-те линка
-  link1="$dst/by-date/$datev/by-album/$album/by-title/$title.jpg"
-  link2="$dst/by-date/$datev/by-title/$title.jpg"
-  link3="$dst/by-album/$album/by-date/$datev/by-title/$title.jpg"
-  link4="$dst/by-album/$album/by-title/$title.jpg"
-  link5="$dst/by-title/$title.jpg"
+    # директории
+    p1="$dst/by-date/$date/by-album/$album/by-title"
+    p2="$dst/by-date/$date/by-title"
+    p3="$dst/by-album/$album/by-date/$date/by-title"
+    p4="$dst/by-album/$album/by-title"
+    p5="$dst/by-title"
 
-  for link in "$link1" "$link2" "$link3" "$link4" "$link5"; do
-    link_dir=$(dirname "$link")
-    mkdir -p "$link_dir"
-    
-     # относителен target
-    target_rel=$(realpath --relative-to="$link_dir" "$img_path")
+    mkdir -p "$p1" "$p2" "$p3" "$p4" "$p5"
 
-    ln -sf "$target_rel" "$link"
-  done
-done < <(find "$src" -type f -name '*.jpg' -print0)
+    # symlink-ове
+    ln -s "../../../../../images/${hash}.jpg" \
+        "$p1/${title}.jpg"
 
+    ln -s "../../../images/${hash}.jpg" \
+        "$p2/${title}.jpg"
+
+    ln -s "../../../../../images/${hash}.jpg" \
+        "$p3/${title}.jpg"
+
+    ln -s "../../../images/${hash}.jpg" \
+        "$p4/${title}.jpg"
+
+    ln -s "../images/${hash}.jpg" \
+        "$p5/${title}.jpg"
+
+done
