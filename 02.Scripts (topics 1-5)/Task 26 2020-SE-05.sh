@@ -1,105 +1,57 @@
-# 1) Проверка: трябва да имаме точно 3 аргумента
-# $1 = foo.pwd, $2 = config.cfg, $3 = cfgdir/
+#!/bin/bash
+
 if [[ $# -ne 3 ]]; then
-  exit 1
+    echo "Usage: $0 foo.pwd config.cfg cfgdir"
+    exit 1
 fi
 
 pwdfile="$1"
-outcfg="$2"
+config="$2"
 cfgdir="$3"
 
-# 2) Проверки за входа
 if [[ ! -f "$pwdfile" ]]; then
-  exit 1
+    echo "Invalid password file"
+    exit 1
 fi
 
 if [[ ! -d "$cfgdir" ]]; then
-  exit 1
+    echo "Invalid cfg directory"
+    exit 1
 fi
 
+> "$config"
 
-re_comment='^[[:space:]]*#.*$'
-re_number='^[[:space:]]*[0-9]+[[:space:]]*$'
-re_block='^[[:space:]]*\{[[:space:]]*[^{}#;]]*[^{}#]]*;[[:space::]]*\};[[:space:]]*$
+find "$cfgdir" -type f -name "*.cfg" | while read -r file; do
 
-is_valid_line(){
-  line=$1
-  echo "$line" | grep -Eq "$re_comment" && return 0
-   # ако е число -> валиден
-  echo "$line" | grep -Eq "$re_number" && return 0
+    invalid=0
+    line_num=0
 
-  # ако е блок { ...; }; -> валиден
-  echo "$line" | grep -Eq "$re_block" && return 0
+    while read -r line; do
+        line_num=$((line_num + 1))
 
-  # иначе е невалиден
-  return 1
-}
+        if ! echo "$line" | grep -Eq '^(#.*|\{ [^}]+ \};)$'; then
+            if [[ $invalid -eq 0 ]]; then
+                echo "Error in $(basename "$file"):"
+                invalid=1
+            fi
 
-# Функция: валидира цял файл
-# Ако има грешки: печата ги и връща 1
-# Ако е валиден: връща 0
+            echo "Line $line_num:$line"
+        fi
 
-validate_file() {
-  file=$1
-  lineno=0
-  has_error=0
-   # ще пазим грешките в променлива (за да ги отпечатаме накрая)
-  
-  errors=""
-WHILE IFS= read -r line; do
-  lineno=$((lineno+1))
-  if ! is_valid_line "$line";then
-    has_error=1
-    errors='${errors} Line ${lineno}:${line}"$'\n;
-  fi
-done < "$file"
-if[[ $has_error -e1 1 ]];then
-  echo "error in "$file:"
-  echo -n "$errors"
-  return 1
-fi
-return 0
-}
-# 4) Взимаме всички .cfg файлове в cfgdir/ (рекурсивно)
-tmp_list=$(mktemp)
-find "$cfgdir" -type f -name '*.cfg' > "$tmp_list"
-# 5) Обхождаме всеки cfg файл
-WHILE IFS= read -r file:do
-  # ако редът е празен (примерно find върне нищо), прескачаме
-  [[ -z "$file" ]] && continue
-# 5.1) Валидирай файла
-  if [[validate_file "$file"]];then
-   # 5.2) Ако е валиден -> добави съдържанието му към config.cf
-    cat "$file">>"$outcfg"
-     filebase=$(basename "$file")
-    username="${filebase%.cfg}"
-    
-    # 5.4) ако username не съществува в pwdfile -> добавяме
-    # Търсим ред, който започва с "username:"
+    done < "$file"
 
-  if [[! grep -q "^${username}:" "$pwdfile"]];then
-     # 5.5) генерираме парола (16 символа, 1 парола)
-     password=$(pwgen 16 1)
+    if [[ $invalid -eq 0 ]]; then
+        cat "$file" >> "$config"
 
-      # 5.6) md5 hash на паролата
-      # echo -n -> без нов ред (иначе md5 ще е за "pass\n")
-      passhash=$(echo -n "$password" | md5sum | cut -d ' ' -f1)
-  # 5.7) добавяме "username:hash" към foo.pwd
-      echo "${username}:${passhash}" >> "$pwdfile"
+        username=$(basename "$file" .cfg)
 
-      # 5.8) печатаме username и паролата на STDOUT
-      echo "${username} ${password}"
+        if ! grep -q "^${username}:" "$pwdfile"; then
+            password=$(pwgen 16 1)
+            hash=$(echo -n "$password" | md5sum | cut -d ' ' -f1)
+
+            echo "${username}:${hash}" >> "$pwdfile"
+            echo "$username $password"
+        fi
     fi
-  fi
 
-done < "$tmp_list"
-
-  # 5.7) добавяме "username:hash" към foo.pwd
-      echo "${username}:${passhash}" >> "$pwdfile"
-
-      # 5.8) печатаме username и паролата на STDOUT
-      echo "${username} ${password}"
-    fi
-  fi
-
-done < "$tmp_list"
+done
