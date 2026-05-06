@@ -1,83 +1,72 @@
 #!/bin/bash
 
-# 1) Проверки
 if [[ $# -ne 2 ]]; then
-  echo "Usage: $0 <repo_path> <package_path>" >&2
-  exit 1
+    echo "Usage: $0 repo package"
+    exit 1
 fi
 
 repo="$1"
-pkgdir="$2"
+pkg="$2"
 
-db="$repo/db"
-pkgstore="$repo/packages"
-
-if [[ ! -d "$repo" || ! -f "$db" || ! -d "$pkgstore" ]]; then
-  echo "Error: invalid repo (need: repo/db and repo/packages/)" >&2
-  exit 1
+if [[ ! -d "$repo" ]]; then
+    echo "Repo is not directory"
+    exit 1
 fi
 
-if [[ ! -d "$pkgdir" || ! -f "$pkgdir/version" || ! -d "$pkgdir/tree" ]]; then
-  echo "Error: invalid package (need: <pkg>/version and <pkg>/tree/)" >&2
-  exit 1
+if [[ ! -f "$repo/db" ]]; then
+    echo "Missing repo db"
+    exit 1
 fi
 
-pkgname="$(basename "$pkgdir")"
-pkgver="$(cat "$pkgdir/version")"
-
-# махаме trailing/leading whitespace (ако случайно има)
-pkgver="$(echo "$pkgver" | tr -d '\r' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
-
-if [[ -z "$pkgver" ]]; then
-  echo "Error: empty version file" >&2
-  exit 1
+if [[ ! -d "$repo/packages" ]]; then
+    echo "Missing repo packages directory"
+    exit 1
 fi
 
-key="${pkgname}-${pkgver}"
+if [[ ! -d "$pkg" ]]; then
+    echo "Package is not directory"
+    exit 1
+fi
 
-# 2) Правим архив на tree/ в tmp файл
-tmp_archive="$(mktemp)"
-tmp_db="$(mktemp)"
+if [[ ! -f "$pkg/version" ]]; then
+    echo "Missing package version"
+    exit 1
+fi
 
-# tar съдържанието на tree (само вътрешността), после го компресираме с xz
-# Получава се .tar.xz
-tar -C "$pkgdir/tree" -cf - . | xz -z -c > "$tmp_archive"
+if [[ ! -d "$pkg/tree" ]]; then
+    echo "Missing package tree"
+    exit 1
+fi
 
-# 3) sha256 checksum на архива
-newsum="$(sha256sum "$tmp_archive" | cut -d ' ' -f1)"
+pkg_name=$(basename "$pkg")
+pkg_version=$(cat "$pkg/version")
+pkg_key="${pkg_name}-${pkg_version}"
 
-# 4) Проверяваме дали key вече съществува в db
-# Точно съвпадение на първа колона:
-oldsum="$(awk -v k="$key" '$1==k {print $2}' "$db" | head -n 1 || true)"
+tmp_archive=$(mktemp)
+tmp_db=$(mktemp)
 
-if [[ -n "$oldsum" ]]; then
-  # 4a) Ако съществува: махаме стария архив (ако го има)
-  oldfile="$pkgstore/${oldsum}.tar.xz"
-  if [[ -f "$oldfile" ]]; then
-    rm -f "$oldfile"
-  fi
+# правим tar.xz архив само на съдържанието на tree
+tar -cJf "$tmp_archive" -C "$pkg/tree" .
 
-  # 4b) Подменяме реда в db: key -> newsum
-  awk -v k="$key" -v s="$newsum" '
-    BEGIN{done=0}
-    $1==k {print k, s; done=1; next}
-    {print}
-    END{
-      if(done==0){ print k, s }
-    }
-  ' "$db" > "$tmp_db"
+checksum=$(sha256sum "$tmp_archive" | cut -d ' ' -f1)
+
+new_archive="$repo/packages/${checksum}.tar.xz"
+
+# ако тази версия вече съществува, намираме стария checksum
+old_checksum=$(grep "^${pkg_key} " "$repo/db" | cut -d ' ' -f2)
+
+if [[ -n "$old_checksum" ]]; then
+    rm -f "$repo/packages/${old_checksum}.tar.xz"
+
+    grep -v "^${pkg_key} " "$repo/db" > "$tmp_db"
 else
-  # 5) Ако не съществува: добавяме нов ред
-  cat "$db" > "$tmp_db"
-  echo "$key $newsum" >> "$tmp_db"
+    cp "$repo/db" "$tmp_db"
 fi
 
-# 6) Сортираме db лексикографски и го заменяме атомично
-sort "$tmp_db" > "${tmp_db}.sorted"
-mv "${tmp_db}.sorted" "$db"
+mv "$tmp_archive" "$new_archive"
 
-# 7) Преместваме архива в repo/packages под името checksum.tar.xz
-mv "$tmp_archive" "$pkgstore/${newsum}.tar.xz"
+echo "$pkg_key $checksum" >> "$tmp_db"
 
-# 8) чистене на tmp (ако остане)
+sort "$tmp_db" > "$repo/db"
+
 rm -f "$tmp_db"
