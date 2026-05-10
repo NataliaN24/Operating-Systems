@@ -1,3 +1,110 @@
+#!/bin/bash
+
+if [[ $# -ne 2 ]]; then
+    echo "Usage: $0 <fubar_dir> <percent>" >&2
+    exit 1
+fi
+
+fubar="$1"
+max="$2"
+
+if [[ ! -d "$fubar" ]]; then
+    echo "Invalid directory" >&2
+    exit 1
+fi
+
+if [[ "$max" -lt 1 || "$max" -gt 99 ]]; then
+    echo "Percent must be in [1,99]" >&2
+    exit 1
+fi
+
+for d in 0 1 2 3; do
+    if [[ ! -d "$fubar/$d" ]]; then
+        echo "Missing directory $d" >&2
+        exit 1
+    fi
+done
+
+# трием счупени symlink-ове
+find "$fubar" -type l ! -exec test -e {} \; -delete
+
+tmp=$(mktemp)
+
+for class in 0 1 2 3; do
+
+    find "$fubar/$class" -type f -name '*.tar.xz' | while read -r file; do
+
+        name=$(basename "$file")
+
+        host=$(echo "$name" | cut -d '-' -f1)
+        area=$(echo "$name" | cut -d '-' -f2)
+        date=$(echo "$name" | cut -d '-' -f3 | cut -d '.' -f1)
+
+        object="$host-$area"
+
+        echo "$class $object $date $file" >> "$tmp"
+
+    done
+
+done
+
+candidates=$(mktemp)
+
+for class in 0 1 2 3; do
+
+    if [[ "$class" -eq 0 ]]; then
+        min=1
+    elif [[ "$class" -eq 1 ]]; then
+        min=2
+    elif [[ "$class" -eq 2 ]]; then
+        min=3
+    else
+        min=4
+    fi
+
+    grep "^$class " "$tmp" | cut -d ' ' -f2 | sort | uniq | while read -r object; do
+
+        count=$(grep "^$class $object " "$tmp" | wc -l)
+
+        if [[ "$count" -gt "$min" ]]; then
+
+            extra=$((count - min))
+
+            grep "^$class $object " "$tmp" |
+            sort -k3,3 |
+            head -n "$extra" |
+            while read -r c obj date path; do
+
+                echo "$c $date $path" >> "$candidates"
+
+            done
+        fi
+
+    done
+
+done
+
+sort -k1,1n -k2,2n "$candidates" | while read -r class date file; do
+
+    used=$(df "$fubar" | tail -n 1 | tr -s ' ' | cut -d ' ' -f5)
+    used="${used%\%}"
+
+    if [[ "$used" -le "$max" ]]; then
+        break
+    fi
+
+    rm -- "$file"
+
+done
+
+# пак махаме счупени symlink-ове
+find "$fubar" -type l ! -exec test -e {} \; -delete
+
+rm "$tmp"
+rm "$candidates"
+
+
+####################################################################################################
 if [[ ${#} -ne 2 ]] ; then
   echo "Expected 2 arguments"
   exit 1
