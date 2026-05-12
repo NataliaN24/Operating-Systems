@@ -1,6 +1,57 @@
 #!/bin/bash
 
 if [[ $# -ne 1 ]]; then
+    echo "Usage: $0 <dir>" >&2
+    exit 1
+fi
+
+dir="$1"
+
+if [[ ! -d "$dir" ]]; then
+    echo "Not a directory" >&2
+    exit 1
+fi
+
+tmp=$(mktemp)
+
+find "$dir" -type f | while read -r file; do
+    hash=$(sha256sum "$file" | cut -d ' ' -f1)
+    size=$(stat -c '%s' "$file")
+    echo "$hash $size $file"
+done | sort > "$tmp"
+
+dedup_groups=0
+freed=0
+
+cut -d ' ' -f1 "$tmp" | sort | uniq | while read -r hash; do
+
+    count=$(grep "^$hash " "$tmp" | wc -l)
+
+    if [[ "$count" -ge 2 ]]; then
+        dedup_groups=$((dedup_groups + 1))
+
+        first=$(grep "^$hash " "$tmp" | head -n 1 | cut -d ' ' -f3-)
+        size=$(grep "^$hash " "$tmp" | head -n 1 | cut -d ' ' -f2)
+
+        freed=$((freed + size * (count - 1)))
+
+        grep "^$hash " "$tmp" | tail -n +2 | while read -r h s file; do
+            rm -- "$file"
+            ln -- "$first" "$file"
+        done
+    fi
+
+done
+
+echo "Deduplicated $dedup_groups groups."
+echo "Freed $freed bytes."
+
+rm -f "$tmp"
+
+########################################################################################################################################33
+#!/bin/bash
+
+if [[ $# -ne 1 ]]; then
     echo "Usage: $0 <dir>"
     exit 1
 fi
