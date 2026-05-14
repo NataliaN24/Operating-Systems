@@ -1,5 +1,56 @@
 #!/bin/bash
 
+if [[ $# -ne 2 ]]; then
+    echo "Usage: $0 <project_dir> <output_svg>"
+    exit 1
+fi
+
+dir="$1"
+out="$2"
+
+if [[ ! -d "$dir" ]]; then
+    echo "First argument must be a directory"
+    exit 1
+fi
+
+graph=$(mktemp)
+
+find "$dir" -type f \( -name "*.h" -o -name "*.hh" -o -name "*.hpp" \) | while read -r file; do
+
+    grep '^class ' "$file" | while read -r line; do
+
+        class=$(echo "$line" | tr -s ' ' | cut -d ' ' -f2)
+
+        echo "$class" >> "$graph"
+
+        if echo "$line" | grep ':' > /dev/null; then
+
+            inheritance=$(echo "$line" | cut -d ':' -f2-)
+
+            echo "$inheritance" | tr ',' '\n' | while read -r parent_part; do
+
+                parent=$(echo "$parent_part" | sed 's/^ *//' | tr -s ' ' | cut -d ' ' -f2)
+
+                if [[ -n "$parent" ]]; then
+                    echo "$parent -> $class" >> "$graph"
+                fi
+
+            done
+        fi
+
+    done
+
+done
+
+dag-ger "$graph" > "$out"
+
+rm "$graph"
+
+
+##################################################################################################################
+
+#!/bin/bash
+
 if [[ ${#} -ne 2 ]];
 then
     echo "error"
