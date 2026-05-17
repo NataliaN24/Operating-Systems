@@ -1,5 +1,48 @@
 #!/bin/bash
 
+if [[ "$#" -ne 2 ]]; then
+    exit 1
+fi
+
+oldDir="$1"
+newDir="$2"
+
+if [[ ! -d "$oldDir" ]]; then
+    exit 1
+fi
+
+mkdir -p "$newDir"
+
+find "$oldDir" -type f -name "*.bcf" | while read -r file; do
+
+    relative=$(echo "$file" | sed "s|^$oldDir/||")
+    output="$newDir/${relative%.bcf}.bcf2"
+
+    mkdir -p "$(dirname "$output")"
+    > "$output"
+
+    keys=$(cut -d '=' -f1 "$file" | sort | uniq -c | tr -s ' ' | sed 's/^ //' | sort -k2)
+
+    echo "$keys" | while read -r count key; do
+
+        if [[ "$count" -gt 1 ]]; then
+            echo "$key:" >> "$output"
+
+            grep "^$key=" "$file" | cut -d '=' -f2- | while read -r value; do
+                echo "- $value" >> "$output"
+            done
+
+        else
+            value=$(grep "^$key=" "$file" | cut -d '=' -f2-)
+            echo "$key: $value" >> "$output"
+        fi
+
+    done
+
+done
+#############################################################################################################################
+#!/bin/bash
+
 if [[ $# -ne 2 ]]; then
   exit 1
 fi
