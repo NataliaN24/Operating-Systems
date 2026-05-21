@@ -4,7 +4,94 @@
 #include <stdlib.h>
 #include <err.h>
 #include <sys/stat.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <err.h>
+#include <sys/stat.h>
 
+typedef struct {
+    uint16_t offset;
+    uint8_t orig;
+    uint8_t newb;
+} data;
+
+int main(int argc, char* argv[])
+{
+    if (argc != 4) {
+        errx(1, "usage: %s f1.bin patch.bin f2.bin", argv[0]);
+    }
+
+    int fd1 = open(argv[1], O_RDONLY);
+    if (fd1 == -1) {
+        err(1, "open f1");
+    }
+
+    int patchfd = open(argv[2], O_RDONLY);
+    if (patchfd == -1) {
+        err(1, "open patch");
+    }
+
+    int fd2 = open(argv[3], O_RDWR | O_TRUNC | O_CREAT, 0644);
+    if (fd2 == -1) {
+        err(1, "open f2");
+    }
+
+    char buff[4096];
+    ssize_t bytesRead;
+
+    while ((bytesRead = read(fd1, buff, sizeof(buff))) > 0) {
+        if (write(fd2, buff, bytesRead) != bytesRead) {
+            err(1, "write f2");
+        }
+    }
+
+    if (bytesRead == -1) {
+        err(1, "read f1");
+    }
+
+    data p;
+
+    while ((bytesRead = read(patchfd, &p, sizeof(p))) > 0) {
+        if (bytesRead != sizeof(p)) {
+            errx(1, "invalid patch file");
+        }
+
+        if (lseek(fd2, p.offset, SEEK_SET) == -1) {
+            err(1, "lseek");
+        }
+
+        uint8_t current;
+
+        if (read(fd2, &current, 1) != 1) {
+            errx(1, "offset does not exist");
+        }
+
+        if (current != p.orig) {
+            errx(1, "original byte mismatch");
+        }
+
+        if (lseek(fd2, p.offset, SEEK_SET) == -1) {
+            err(1, "lseek back");
+        }
+
+        if (write(fd2, &p.newb, 1) != 1) {
+            err(1, "write new byte");
+        }
+    }
+
+    if (bytesRead == -1) {
+        err(1, "read patch");
+    }
+
+    close(fd1);
+    close(patchfd);
+    close(fd2);
+
+    exit(0);
+}
+/////////////////////////////////////////////////////////////////////////////////////////////
 typedef struct {
     uint16_t offset;
     uint8_t oldByte;
