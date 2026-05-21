@@ -1,110 +1,108 @@
-
 #include <stdlib.h>
 #include <unistd.h>
-#include <fcntl.h>
 #include <err.h>
-#include <errno.h>
-#include <stdint.h>
-#include <sys/stat.h>
-#include <sys/param.h>
+#include <string.h>
 
-void processC(int beg,int end) //abcdef 2-4  ->bcd
+void processC(int beg, int end)
 {
     char c;
-    int readBytes;
-    int count=1;
-    while((readBytes=read(0,&c,sizeof(c)))>0)
-    {
-        if(count>=beg && count<=end)
-        {
-            if(write(1,&c,sizeof(c))<0)
-            {
-                err(1,"error");
+    ssize_t readBytes;
+    int count = 1;
+
+    while ((readBytes = read(0, &c, 1)) > 0) {
+        if (c == '\n') {
+            if (write(1, &c, 1) != 1) {
+                err(1, "write");
             }
-            if(count==end)
-            {
-                char s='\n';
-                if(write(1,&s,sizeof(s))<0)
-                {
-                    err(1,"error");
-                }
+            count = 1;
+            continue;
+        }
+
+        if (count >= beg && count <= end) {
+            if (write(1, &c, 1) != 1) {
+                err(1, "write");
             }
-            count++;
         }
-        if(c=='\n')
-        {
-            count=1;
-        }
-    }
-    if(readBytes<0)
-    {
-        err(1,"error");
+
+        count++;
     }
 
+    if (readBytes < 0) {
+        err(1, "read");
+    }
 }
-void processD(char sep,int beg,int end) //aaa:bbb:ccc:dddd:eee 2-4
+
+void processD(char sep, int beg, int end)
 {
     char c;
-    int bytesRead;
-    int count=1;
-    while((bytesRead=read(0,&c,sizeof(c)))>0)
-    {
-        if(count>=beg &&count <=end)
-        {
-            if(!(c==sep && count==beg &&count==end))
-            {
-                if(write(1,&c,sizeof(c))<0)
-                {
-                    err(1,"error");
+    ssize_t bytesRead;
+    int field = 1;
+    int printedSomething = 0;
+
+    while ((bytesRead = read(0, &c, 1)) > 0) {
+        if (c == '\n') {
+            if (write(1, &c, 1) != 1) {
+                err(1, "write");
+            }
+
+            field = 1;
+            printedSomething = 0;
+            continue;
+        }
+
+        if (c == sep) {
+            if (field >= beg && field < end) {
+                if (write(1, &c, 1) != 1) {
+                    err(1, "write");
                 }
             }
+
+            field++;
+            continue;
         }
-        if(c==sep)
-        {
-            count++;
-        }
-        else if(c=='\n')
-        {
-            if(write(1,&c,sizeof(c))<0)
-            {
-                err(1,"error");
+
+        if (field >= beg && field <= end) {
+            if (write(1, &c, 1) != 1) {
+                err(1, "write");
             }
-            count=1;
+            printedSomething = 1;
         }
     }
 
-
-
-}
-int main(int argc, char** argv) {
-    if(strcmp(argv[1],"-c")==0)
-    {
-        if(strlen(argv[2])==1) //cut -c 2
-        {
-            processC(argv[2][0]-'0',argv[2][0]-'0');
-        }
-        else //cut -c 2-5
-        {
-            processC(argv[2][0]-'0',argv[2][2]-'0');
-        }
+    if (bytesRead < 0) {
+        err(1, "read");
     }
-    if(strcmp(argv[1],"-d")==0) //./main -d : -f 2-3
-    {
-        if(strlen(argv[4])==1)
-        {
-            processD(argv[2][0],argv[4][0]-'0',argv[4][0]-'0');
-        }
-        else{
-            processD(argv[2][0],argv[4][0]-'0',argv[4][2]-'0');
-        }
-
-    }
-        
 }
 
+int main(int argc, char** argv)
+{
+    if (argc < 3) {
+        errx(1, "usage");
+    }
 
+    if (strcmp(argv[1], "-c") == 0) {
+        if (argc != 3) {
+            errx(1, "usage: ./main -c N or ./main -c N-M");
+        }
 
-argv[2]     → "3-5"
-argv[2][0]  → '3'
-argv[2][1]  → '-'
-argv[2][2]  → '5'
+        if (strlen(argv[2]) == 1) {
+            processC(argv[2][0] - '0', argv[2][0] - '0');
+        } else {
+            processC(argv[2][0] - '0', argv[2][2] - '0');
+        }
+    } else if (strcmp(argv[1], "-d") == 0) {
+        if (argc != 5 || strcmp(argv[3], "-f") != 0) {
+            errx(1, "usage: ./main -d SEP -f N or ./main -d SEP -f N-M");
+        }
+
+        if (strlen(argv[4]) == 1) {
+            processD(argv[2][0], argv[4][0] - '0', argv[4][0] - '0');
+        } else {
+            processD(argv[2][0], argv[4][0] - '0', argv[4][2] - '0');
+        }
+    } else {
+        errx(1, "unknown option");
+    }
+
+    exit(0);
+}
