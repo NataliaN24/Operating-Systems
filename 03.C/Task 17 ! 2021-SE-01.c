@@ -1,3 +1,57 @@
+#include <stdint.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <err.h>
+#include <stdlib.h>
+
+int main(int argc, char* argv[])
+{
+    if (argc != 3) {
+        errx(1, "usage");
+    }
+
+    int fdIn = open(argv[1], O_RDONLY);
+    if (fdIn < 0) {
+        err(1, "open input");
+    }
+
+    int fdOut = open(argv[2], O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    if (fdOut < 0) {
+        err(1, "open output");
+    }
+
+    uint8_t byte;
+    ssize_t readBytes;
+
+    while ((readBytes = read(fdIn, &byte, sizeof(byte))) > 0) {
+
+        uint16_t result = 0;
+
+        for (int bit = 7; bit >= 0; bit--) {
+
+            result <<= 2;
+
+            if (byte & (1 << bit)) {
+                result |= 2;   // 10
+            }
+            else {
+                result |= 1;   // 01
+            }
+        }
+
+        write(fdOut, &result, sizeof(result));
+    }
+
+    if (readBytes < 0) {
+        err(1, "read");
+    }
+
+    close(fdIn);
+    close(fdOut);
+
+    exit(0);
+}
+///////////////////////////////////////////////////////////////////////////////////////////
 #include <unistd.h>
 #include <fcntl.h>
 #include <stdint.h>
