@@ -1,6 +1,144 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
+#include <err.h>
+
+#define MAX_FILES 20
+#define HEADER_ID 133742
+
+typedef struct {
+    int fd;
+
+    char role[256];
+
+    uint64_t time;
+    uint8_t len;
+    char text[256];
+
+    int active;
+} File;
+
+int readElement(int fd, uint64_t* id, uint8_t* len, char* text)
+{
+    int r = read(fd, id, sizeof(*id));
+
+    if(r < 0){
+        err(1, "read");
+    }
+
+    if(r == 0){
+        return 0;
+    }
+
+    if(r != sizeof(*id)){
+        errx(1, "bad file");
+    }
+
+    if(read(fd, len, sizeof(*len)) != sizeof(*len)){
+        err(1, "read len");
+    }
+
+    if(read(fd, text, *len) != *len){
+        err(1, "read text");
+    }
+
+    text[*len] = '\0';
+
+    return 1;
+}
+
+int main(int argc, char* argv[])
+{
+    if(argc < 2 || argc > 21){
+        errx(1, "usage");
+    }
+
+    int n = argc - 1;
+
+    File files[MAX_FILES];
+
+    for(int i = 0; i < n; i++)
+    {
+        files[i].fd = open(argv[i + 1], O_RDONLY);
+
+        if(files[i].fd < 0){
+            err(1, "open");
+        }
+
+        uint64_t id;
+        uint8_t len;
+
+        if(!readElement(files[i].fd, &id, &len, files[i].role)){
+            errx(1, "empty file");
+        }
+
+        if(id != HEADER_ID){
+            errx(1, "invalid header");
+        }
+
+        if(readElement(files[i].fd,
+                       &files[i].time,
+                       &files[i].len,
+                       files[i].text))
+        {
+            files[i].active = 1;
+        }
+        else
+        {
+            files[i].active = 0;
+        }
+    }
+
+    while(1)
+    {
+        int min = -1;
+
+        for(int i = 0; i < n; i++)
+        {
+            if(files[i].active)
+            {
+                if(min == -1 || files[i].time < files[min].time){
+                    min = i;
+                }
+            }
+        }
+
+        if(min == -1){
+            break;
+        }
+
+        write(1, files[min].role, strlen(files[min].role));
+        write(1, ": ", 2);
+        write(1, files[min].text, files[min].len);
+        write(1, "\n", 1);
+
+        if(readElement(files[min].fd,
+                       &files[min].time,
+                       &files[min].len,
+                       files[min].text))
+        {
+            files[min].active = 1;
+        }
+        else
+        {
+            files[min].active = 0;
+        }
+    }
+
+    for(int i = 0; i < n; i++)
+    {
+        close(files[i].fd);
+    }
+
+    exit(0);
+}
+///////////////////////////////////////////////////////////////////////////////////////
+
+#include <unistd.h>
+#include <fcntl.h>
+#include <stdint.h>
 #include <err.h>
 #include <stdlib.h>
 #include <stdio.h>
