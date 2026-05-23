@@ -1,3 +1,142 @@
+#include <unistd.h>
+#include <fcntl.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <err.h>
+
+typedef struct {
+    uint16_t magic;
+    uint16_t type;
+    uint32_t count;
+} Header;
+
+int main(int argc, char* argv[])
+{
+    if(argc != 4){
+        errx(1, "invalid args");
+    }
+
+    int list = open(argv[1], O_RDONLY);
+    if(list < 0){
+        err(2, "open list");
+    }
+
+    int data = open(argv[2], O_RDONLY);
+    if(data < 0){
+        err(3, "open data");
+    }
+
+    int out = open(argv[3], O_CREAT | O_TRUNC | O_RDWR, 0644);
+    if(out < 0){
+        err(4, "open out");
+    }
+
+    Header hList;
+    Header hData;
+
+    if(read(list, &hList, sizeof(hList)) != sizeof(hList)){
+        err(5, "read");
+    }
+
+    if(read(data, &hData, sizeof(hData)) != sizeof(hData)){
+        err(6, "read");
+    }
+
+    if(hList.magic != 0x5A4D || hList.type != 1){
+        errx(7, "invalid list");
+    }
+
+    if(hData.magic != 0x5A4D || hData.type != 2){
+        errx(8, "invalid data");
+    }
+
+    if(hList.count > hData.count){
+        errx(9, "invalid counts");
+    }
+
+    uint16_t val;
+    uint32_t max = 0;
+
+    for(uint32_t i = 0; i < hList.count; i++)
+    {
+        if(read(list, &val, sizeof(val)) != sizeof(val)){
+            err(10, "read");
+        }
+
+        if(val > max){
+            max = val;
+        }
+    }
+
+    Header hOut;
+    hOut.magic = 0x5A4D;
+    hOut.type = 3;
+    hOut.count = max + 1;
+
+    if(lseek(out, 0, SEEK_SET) < 0){
+        err(11, "lseek");
+    }
+
+    if(write(out, &hOut, sizeof(hOut)) != sizeof(hOut)){
+        err(12, "write");
+    }
+
+    uint64_t zero = 0;
+
+    for(uint32_t i = 0; i < hOut.count; i++)
+    {
+        if(write(out, &zero, sizeof(zero)) != sizeof(zero)){
+            err(13, "write");
+        }
+    }
+
+    if(lseek(list, sizeof(Header), SEEK_SET) < 0){
+        err(14, "lseek");
+    }
+
+    for(uint32_t i = 0; i < hList.count; i++)
+    {
+        uint16_t outPos;
+
+        if(read(list, &outPos, sizeof(outPos)) != sizeof(outPos)){
+            err(15, "read");
+        }
+
+        if(lseek(data,
+                 sizeof(Header) + i * sizeof(uint32_t),
+                 SEEK_SET) < 0){
+            err(16, "lseek");
+        }
+
+        uint32_t curr;
+
+        if(read(data, &curr, sizeof(curr)) != sizeof(curr)){
+            err(17, "read");
+        }
+
+        uint64_t curr64 = curr;
+
+        if(lseek(out,
+                 sizeof(Header) + outPos * sizeof(uint64_t),
+                 SEEK_SET) < 0){
+            err(18, "lseek");
+        }
+
+        if(write(out, &curr64, sizeof(curr64)) != sizeof(curr64)){
+            err(19, "write");
+        }
+    }
+
+    close(list);
+    close(data);
+    close(out);
+
+    exit(0);
+}
+//////////////////////////////////////////////////////////////////////////////////////////////
+
+
+
 #include <fcntl.h>
 #include <err.h>
 #include <unistd.h>
