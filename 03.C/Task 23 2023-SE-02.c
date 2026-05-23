@@ -144,7 +144,112 @@ int main(int argc, char* argv[])
     close(idx);
     exit(0);
 }
-/////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+//without  binaty search
+#include <unistd.h>
+#include <fcntl.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
+#include <err.h>
+
+int main(int argc, char* argv[])
+{
+    if(argc != 4){
+        errx(1, "usage: ./main word english.dic english.idx");
+    }
+
+    int dic = open(argv[2], O_RDONLY);
+    if(dic < 0){
+        err(2, "open dictionary");
+    }
+
+    int idx = open(argv[3], O_RDONLY);
+    if(idx < 0){
+        err(3, "open index");
+    }
+
+    uint32_t pos;
+
+    while(read(idx, &pos, sizeof(pos)) == sizeof(pos))
+    {
+        if(lseek(dic, pos + 1, SEEK_SET) < 0){
+            err(4, "lseek dictionary");
+        }
+
+        char word[64];
+        uint8_t c;
+        int len = 0;
+
+        while(1)
+        {
+            int r = read(dic, &c, 1);
+            if(r < 0){
+                err(5, "read word");
+            }
+            if(r == 0){
+                errx(6, "invalid dictionary");
+            }
+
+            if(c == '\n'){
+                break;
+            }
+
+            if(len >= 63){
+                errx(7, "word too long");
+            }
+
+            word[len++] = c;
+        }
+
+        word[len] = '\0';
+
+        if(strcmp(argv[1], word) == 0)
+        {
+            uint8_t buff[4096];
+
+            while(1)
+            {
+                int r = read(dic, buff, sizeof(buff));
+                if(r < 0){
+                    err(8, "read definition");
+                }
+
+                if(r == 0){
+                    break;
+                }
+
+                int i;
+                for(i = 0; i < r; i++)
+                {
+                    if(buff[i] == 0){
+                        break;
+                    }
+                }
+
+                if(write(1, buff, i) != i){
+                    err(9, "write");
+                }
+
+                if(i < r){
+                    break;
+                }
+            }
+
+            close(dic);
+            close(idx);
+            exit(0);
+        }
+    }
+
+    const char msg[] = "word not found\n";
+    write(1, msg, sizeof(msg) - 1);
+
+    close(dic);
+    close(idx);
+    exit(0);
+}
+///////////////////////////////////////////////////////////////////////////////////////////////
 
 
 #include <unistd.h>
