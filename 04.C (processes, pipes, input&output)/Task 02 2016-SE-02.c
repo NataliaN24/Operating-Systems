@@ -1,4 +1,68 @@
 #include <unistd.h>
+#include <string.h>
+#include <sys/wait.h>
+#include <err.h>
+
+int main(void)
+{
+    char cmd[100];
+
+    while(1)
+    {
+        // 1. prompt
+        if(write(1, "> ", 2) == -1)
+        {
+            err(1, "write");
+        }
+
+        // 2. read command
+        ssize_t bytesRead = read(0, cmd, sizeof(cmd)-1);
+
+        if(bytesRead == -1)
+        {
+            err(1, "read");
+        }
+
+        if(bytesRead == 0)
+        {
+            break;
+        }
+
+        // remove '\n'
+        cmd[bytesRead - 1] = '\0';
+
+        // exit
+        if(strcmp(cmd, "exit") == 0)
+        {
+            break;
+        }
+
+        pid_t pid = fork();
+
+        if(pid == -1)
+        {
+            err(1, "fork");
+        }
+
+        if(pid == 0)
+        {
+            // child
+
+            char path[200] = "/bin/";
+
+            strcat(path, cmd);
+
+            execl(path, cmd, (char*)NULL);
+
+            err(1, "exec");
+        }
+
+        // parent waits
+        wait(NULL);
+    }
+}
+/////////////////////////////////////////////////////////////////////////////////////////////////////
+#include <unistd.h>
 #include <fcntl.h>
 #include <stdint.h>
 #include <stdlib.h>
