@@ -1,4 +1,107 @@
+#include <unistd.h>
+#include <fcntl.h>
+#include <string.h>
+#include <err.h>
 
+void print_num(int n)
+{
+    char buf[16];
+    int i = 0;
+
+    while (n > 0) {
+        buf[i++] = n % 10 + '0';
+        n /= 10;
+    }
+
+    while (i > 0) {
+        i--;
+        if (write(1, &buf[i], 1) != 1) {
+            err(1, "write");
+        }
+    }
+}
+
+int main(int argc, char *argv[])
+{
+    int use_numbers = 0;
+    int start = 1;
+
+    if (argc > 1 && strcmp(argv[1], "-n") == 0) {
+        use_numbers = 1;
+        start = 2;
+    }
+
+    int line_num = 1;
+    int at_beginning = 1;
+
+    if (start == argc) {
+        char ch;
+        ssize_t bytesread;
+
+        while ((bytesread = read(0, &ch, 1)) > 0) {
+            if (use_numbers && at_beginning) {
+                print_num(line_num);
+                write(1, " ", 1);
+                line_num++;
+                at_beginning = 0;
+            }
+
+            write(1, &ch, 1);
+
+            if (ch == '\n') {
+                at_beginning = 1;
+            }
+        }
+
+        if (bytesread < 0) {
+            err(1, "read");
+        }
+
+        return 0;
+    }
+
+    for (int i = start; i < argc; i++) {
+        int fd;
+
+        if (strcmp(argv[i], "-") == 0) {
+            fd = 0;
+        } else {
+            fd = open(argv[i], O_RDONLY);
+            if (fd < 0) {
+                err(1, "open");
+            }
+        }
+
+        char ch;
+        ssize_t bytesread;
+
+        while ((bytesread = read(fd, &ch, 1)) > 0) {
+            if (use_numbers && at_beginning) {
+                print_num(line_num);
+                write(1, " ", 1);
+                line_num++;
+                at_beginning = 0;
+            }
+
+            write(1, &ch, 1);
+
+            if (ch == '\n') {
+                at_beginning = 1;
+            }
+        }
+
+        if (bytesread < 0) {
+            err(1, "read");
+        }
+
+        if (fd != 0) {
+            close(fd);
+        }
+    }
+
+    return 0;
+}
+/////////////////////////////////////////////////////////////////////////////////////////
 #include <unistd.h>
 #include <fcntl.h>
 #include <stdint.h>
