@@ -1,3 +1,89 @@
+#include <fcntl.h>
+#include <err.h>
+#include <unistd.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <stdbool.h>
+#include <sys/stat.h>
+#include <sys/wait.h>
+#include <time.h>
+
+int main(int argc, char* argv[])
+{
+    if(argc != 2) { err(1, "Not enough argumenets"); }
+
+    int fd = open(argv[1], O_RDONLY);
+    if(fd < 0) { err(2, "Open"); }
+
+    int wire[2];
+    if(pipe(wire) < 0) { err(3, "Pipe"); }
+
+    struct stat f_info;
+    if(fstat(fd, &f_info) < 0) { err(4, "Fstat"); }
+    int count = f_info.st_size / 16;
+
+    uint16_t finalRes = 0;
+
+    for(int i = 0; i < count; i++)
+    {
+        char filename[8];
+        uint32_t offset, len;
+
+        if(read(fd, filename, sizeof(filename)) < 0 || read(fd, &offset, sizeof(offset)) < 0 || read(fd, &len, sizeof(len)) < 0) { err(5, "Read"); }
+
+        int pid = fork();
+        if(pid < 0) { err(6, "Fork"); }
+        if(pid == 0)
+        {
+            int currFd = open(filename, O_RDONLY);
+            if(currFd < 0) { err(7, "Open"); }
+
+            if(lseek(currFd, offset * sizeof(uint16_t), SEEK_SET) < 0) { err(8, "Lseek"); }
+            uint16_t res = 0;
+
+            //let's say that the format is guaranteed so I don't need to check if the current file size is less than the offset + len * 2
+            for(int j = 0; j < (int)len; j++)
+            {
+                uint16_t byte;
+                if(read(currFd, &byte, sizeof(byte)) < 0) { err(9, "Read"); }
+                res ^= byte;
+            }
+
+            if(close(wire[0]) < 0) { err(10, "Close"); }
+            if(write(wire[1], &res, sizeof(res)) < 0) { err(11, "Write"); }
+            if(close(wire[1]) < 0) { err(12, "Close"); }
+            exit(0);
+        }
+    }
+
+    if(close(wire[1]) < 0) { err(13, "Close"); }
+
+    for(int i = 0; i < count; i++){
+        wait(NULL);
+    }
+
+    int readBytes = 0;
+    uint16_t currRes;
+    while((readBytes = read(wire[0], &currRes, sizeof(currRes))) > 0)
+    {
+        finalRes ^= currRes;
+    }
+
+    if(readBytes < 0) { err(14, "Read"); }
+
+    char buff[64];
+    snprintf(buff, sizeof(buff), "result: %04X\n", finalRes);
+    if(write(1, buff, strlen(buff)) < 0) { err(15, "Write"); }
+
+    return 0;
+}
+
+//////////////////////////////////////////////////////////////////////////////////////////////
+
+
+
 #include <unistd.h>
 #include <fcntl.h>
 #include <stdint.h>
