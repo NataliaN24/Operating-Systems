@@ -2,6 +2,149 @@
 #include <fcntl.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <sys/wait.h>
+#include <err.h>
+
+int main(void)
+{
+    int input = open("input.bin", O_RDONLY);
+    if (input < 0) {
+        err(1, "open input.bin");
+    }
+
+    uint16_t ram_size;
+    uint16_t register_count;
+    char filename[8];
+
+    while (read(input, &ram_size, sizeof(ram_size)) == sizeof(ram_size)) {
+        if (read(input, &register_count, sizeof(register_count)) != sizeof(register_count)) {
+            err(2, "read register_count");
+        }
+
+        if (read(input, filename, sizeof(filename)) != sizeof(filename)) {
+            err(3, "read filename");
+        }
+
+        pid_t pid = fork();
+        if (pid < 0) {
+            err(4, "fork");
+        }
+
+        if (pid == 0) {
+            int fd = open(filename, O_RDWR);
+            if (fd < 0) {
+                err(5, "open processor file");
+            }
+
+            uint8_t registers[32];
+            uint8_t ram[512];
+
+            if (read(fd, registers, register_count) != register_count) {
+                err(6, "read registers");
+            }
+
+            if (read(fd, ram, ram_size) != ram_size) {
+                err(7, "read ram");
+            }
+
+            uint8_t instructions[4096];
+            ssize_t instr_bytes = read(fd, instructions, sizeof(instructions));
+            if (instr_bytes < 0) {
+                err(8, "read instructions");
+            }
+
+            if (instr_bytes % 4 != 0) {
+                errx(9, "bad instructions size");
+            }
+
+            int instr_count = instr_bytes / 4;
+            int pc = 0;
+
+            while (pc < instr_count) {
+                uint8_t opcode = instructions[pc * 4];
+                uint8_t op1 = instructions[pc * 4 + 1];
+                uint8_t op2 = instructions[pc * 4 + 2];
+                uint8_t op3 = instructions[pc * 4 + 3];
+
+                if (opcode == 0) {
+                    registers[op1] = registers[op2] & registers[op3];
+                    pc++;
+                } else if (opcode == 1) {
+                    registers[op1] = registers[op2] | registers[op3];
+                    pc++;
+                } else if (opcode == 2) {
+                    registers[op1] = registers[op2] + registers[op3];
+                    pc++;
+                } else if (opcode == 3) {
+                    registers[op1] = registers[op2] * registers[op3];
+                    pc++;
+                } else if (opcode == 4) {
+                    registers[op1] = registers[op2] ^ registers[op3];
+                    pc++;
+                } else if (opcode == 5) {
+                    if (write(1, &registers[op1], 1) != 1) {
+                        err(10, "print");
+                    }
+                    pc++;
+                } else if (opcode == 6) {
+                    sleep(registers[op1]);
+                    pc++;
+                } else if (opcode == 7) {
+                    registers[op1] = ram[registers[op2]];
+                    pc++;
+                } else if (opcode == 8) {
+                    ram[registers[op2]] = registers[op1];
+                    pc++;
+                } else if (opcode == 9) {
+                    if (registers[op1] != registers[op2]) {
+                        pc = op3;
+                    } else {
+                        pc++;
+                    }
+                } else if (opcode == 10) {
+                    registers[op1] = op2;
+                    pc++;
+                } else if (opcode == 11) {
+                    ram[registers[op1]] = op2;
+                    pc++;
+                } else {
+                    errx(11, "bad opcode");
+                }
+            }
+
+            if (lseek(fd, 0, SEEK_SET) < 0) {
+                err(12, "lseek");
+            }
+
+            if (write(fd, registers, register_count) != register_count) {
+                err(13, "write registers");
+            }
+
+            if (write(fd, ram, ram_size) != ram_size) {
+                err(14, "write ram");
+            }
+
+            close(fd);
+            _exit(0);
+        }
+    }
+
+    close(input);
+
+    while (wait(NULL) > 0) {
+    }
+
+    return 0;
+}
+//////////////////////////////////////////////////////////////////////////////////////////////
+
+
+
+
+#include <unistd.h>
+#include <fcntl.h>
+#include <stdint.h>
+#include <stdlib.h>
 #include <err.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
