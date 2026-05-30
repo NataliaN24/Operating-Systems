@@ -1,3 +1,153 @@
+#include <unistd.h>
+#include <fcntl.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include <sys/wait.h>
+#include <err.h>
+
+int main(int argc, char* argv[])
+{
+    if(argc != 4)
+    {
+        errx(26, "Invalid arguments");
+    }
+
+    char* program = argv[1];
+
+    long N = strtol(argv[2], NULL, 10);
+
+    if(N < 0 || N >= 256)
+    {
+        errx(26, "Invalid N");
+    }
+
+    int result_fd = open(argv[3], O_WRONLY | O_CREAT | O_TRUNC, 0644);
+
+    if(result_fd < 0)
+    {
+        err(26, "open result");
+    }
+
+    int urandom = open("/dev/urandom", O_RDONLY);
+
+    if(urandom < 0)
+    {
+        err(26, "open urandom");
+    }
+
+    for(long i = 0; i < N; i++)
+    {
+        uint16_t S;
+
+        if(read(urandom, &S, sizeof(S)) != sizeof(S))
+        {
+            err(26, "read S");
+        }
+
+        char input[S];
+
+        if(S > 0)
+        {
+            if(read(urandom, input, S) < 0)
+            {
+                err(26, "read input");
+            }
+        }
+
+        int p[2];
+
+        if(pipe(p) < 0)
+        {
+            err(26, "pipe");
+        }
+
+        pid_t pid = fork();
+
+        if(pid < 0)
+        {
+            err(26, "fork");
+        }
+
+        if(pid == 0)
+        {
+            close(p[1]);
+
+            if(dup2(p[0], 0) < 0)
+            {
+                _exit(26);
+            }
+
+            close(p[0]);
+
+            int devnull = open("/dev/null", O_WRONLY);
+
+            if(devnull < 0)
+            {
+                _exit(26);
+            }
+
+            if(dup2(devnull, 1) < 0)
+            {
+                _exit(26);
+            }
+
+            if(dup2(devnull, 2) < 0)
+            {
+                _exit(26);
+            }
+
+            close(devnull);
+
+            execl(program, program, (char*)NULL);
+
+            _exit(26);
+        }
+
+        close(p[0]);
+
+        if(S > 0)
+        {
+            if(write(p[1], input, S) < 0)
+            {
+                err(26, "write input");
+            }
+        }
+
+        close(p[1]);
+
+        int status;
+
+        if(waitpid(pid, &status, 0) < 0)
+        {
+            err(26, "waitpid");
+        }
+
+        if(WIFSIGNALED(status))
+        {
+            if(S > 0)
+            {
+                if(write(result_fd, input, S) < 0)
+                {
+                    err(26, "write result");
+                }
+            }
+
+            close(result_fd);
+            close(urandom);
+
+            return 42;
+        }
+    }
+
+    close(result_fd);
+    close(urandom);
+
+    return 0;
+}
+////////////////////////////////////////////////////////////////////////////////////////
+
+
+
 #include <fcntl.h>
 #include <err.h>
 #include <unistd.h>
