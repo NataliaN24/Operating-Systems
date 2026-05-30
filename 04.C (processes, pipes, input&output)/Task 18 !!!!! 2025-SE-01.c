@@ -3,51 +3,86 @@
 #include <stdlib.h>
 #include <string.h>
 #include <err.h>
-#include <sys/wait.h>
 
 #define N 4
 #define SIZE 16
 
-int main() {
+int main(void)
+{
     int driver_p[2];
-    int wheel_p[N][2];
 
-    // pipe за driver
-    if (pipe(driver_p) < 0) err(1, "pipe");
+    int to_wheel[N][2];     // parent -> wheel
+    int from_wheel[N][2];   // wheel -> parent
 
-    // pipes за колелата
-    for (int i = 0; i < N; i++) {
-        if (pipe(wheel_p[i]) < 0) err(1, "pipe");
+    if (pipe(driver_p) < 0) {
+        err(1, "pipe driver");
     }
 
-    // --- driver ---
-    if (fork() == 0) {
-        dup2(driver_p[1], 1); // stdout -> pipe
+    for (int i = 0; i < N; i++) {
+        if (pipe(to_wheel[i]) < 0) {
+            err(1, "pipe to wheel");
+        }
+
+        if (pipe(from_wheel[i]) < 0) {
+            err(1, "pipe from wheel");
+        }
+    }
+
+    // driver
+    pid_t pid = fork();
+    if (pid < 0) {
+        err(1, "fork driver");
+    }
+
+    if (pid == 0) {
+        dup2(driver_p[1], 1);
+
         close(driver_p[0]);
         close(driver_p[1]);
 
-        execlp("./fake_driver", "fake_driver", NULL);
+        for (int i = 0; i < N; i++) {
+            close(to_wheel[i][0]);
+            close(to_wheel[i][1]);
+            close(from_wheel[i][0]);
+            close(from_wheel[i][1]);
+        }
+
+        execlp("./fake_driver", "fake_driver", (char*)NULL);
         err(1, "exec driver");
     }
 
-    // --- wheels ---
+    // wheels
     for (int i = 0; i < N; i++) {
-        if (fork() == 0) {
-            dup2(wheel_p[i][0], 0); // stdin
-            dup2(wheel_p[i][1], 1); // stdout
+        pid = fork();
+        if (pid < 0) {
+            err(1, "fork wheel");
+        }
 
-            close(wheel_p[i][0]);
-            close(wheel_p[i][1]);
+        if (pid == 0) {
+            dup2(to_wheel[i][0], 0);
+            dup2(from_wheel[i][1], 1);
 
-            execlp("./fake_wheel", "fake_wheel", NULL);
+            close(driver_p[0]);
+            close(driver_p[1]);
+
+            for (int j = 0; j < N; j++) {
+                close(to_wheel[j][0]);
+                close(to_wheel[j][1]);
+                close(from_wheel[j][0]);
+                close(from_wheel[j][1]);
+            }
+
+            execlp("./fake_wheel", "fake_wheel", (char*)NULL);
             err(1, "exec wheel");
         }
     }
 
-    // родителят затваря ненужните
+    // parent
     close(driver_p[1]);
+
     for (int i = 0; i < N; i++) {
-        close(wheel_p[i][0]);
+        close(to_wheel[i][0]);
+        close(from_wheel[i][1]);
     }
 
     uint16_t I = 0;
@@ -55,35 +90,31 @@ int main() {
     while (1) {
         uint8_t buf[SIZE];
 
-        // --- четем газ ---
         if (read(driver_p[0], buf, SIZE) != SIZE) {
             err(1, "read driver");
         }
 
-        uint16_t omega_req = (buf[8] << 8) | buf[9];
+        uint16_t omega_req = ((uint16_t)buf[8] << 8) | buf[9];
 
-        // --- четем скорости ---
-        uint16_t sum = 0;
+        uint32_t sum = 0;
 
         for (int i = 0; i < N; i++) {
-            if (read(wheel_p[i][1], buf, SIZE) != SIZE) {
+            if (read(from_wheel[i][0], buf, SIZE) != SIZE) {
                 err(1, "read wheel");
             }
 
-            uint16_t w = (buf[2] << 8) | buf[3];
+            uint16_t w = ((uint16_t)buf[2] << 8) | buf[3];
             sum += w;
         }
 
-        uint16_t real_speed = sum / 4;
+        uint16_t real_speed = sum / N;
 
-        // --- update I ---
         if (real_speed < omega_req) {
             I++;
         } else if (real_speed > omega_req) {
             I--;
         }
 
-        // --- пращаме ток ---
         uint8_t out[SIZE];
         memset(out, 0, SIZE);
 
@@ -91,7 +122,7 @@ int main() {
         out[3] = I & 0xFF;
 
         for (int i = 0; i < N; i++) {
-            if (write(wheel_p[i][1], out, SIZE) != SIZE) {
+            if (write(to_wheel[i][1], out, SIZE) != SIZE) {
                 err(1, "write wheel");
             }
         }
