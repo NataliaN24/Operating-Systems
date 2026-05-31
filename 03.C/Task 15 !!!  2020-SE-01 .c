@@ -1,5 +1,144 @@
 #include <unistd.h>
 #include <fcntl.h>
+#include <stdint.h>
+#include <err.h>
+
+#define H 16
+
+int main(int argc, char* argv[])
+{
+    if (argc != 7) {
+        errx(1, "Usage: %s affix postfix prefix infix suffix crucifixus", argv[0]);
+    }
+
+    int affix = open(argv[1], O_RDONLY);
+    int postfix = open(argv[2], O_RDONLY);
+    int prefix = open(argv[3], O_RDONLY);
+    int infix = open(argv[4], O_RDONLY);
+    int suffix = open(argv[5], O_RDONLY);
+    int out = open(argv[6], O_WRONLY | O_CREAT | O_TRUNC, 0644);
+
+    if (affix < 0 || postfix < 0 || prefix < 0 || infix < 0 || suffix < 0 || out < 0) {
+        err(2, "open");
+    }
+
+    uint16_t affixCount, postCount, preCount, inCount, sufCount;
+
+    lseek(affix, 4, SEEK_SET);
+    read(affix, &affixCount, sizeof(affixCount));
+
+    lseek(postfix, 4, SEEK_SET);
+    read(postfix, &postCount, sizeof(postCount));
+
+    lseek(prefix, 4, SEEK_SET);
+    read(prefix, &preCount, sizeof(preCount));
+
+    lseek(infix, 4, SEEK_SET);
+    read(infix, &inCount, sizeof(inCount));
+
+    lseek(suffix, 4, SEEK_SET);
+    read(suffix, &sufCount, sizeof(sufCount));
+
+    if (affixCount % 8 != 0) {
+        errx(3, "bad affix count");
+    }
+
+    uint8_t zero = 0;
+
+    for (int i = 0; i < H; i++) {
+        write(out, &zero, 1);
+    }
+
+    lseek(affix, H, SEEK_SET);
+
+    uint16_t outCount = 0;
+
+    for (int i = 0; i < affixCount / 8; i++)
+    {
+        uint16_t postStart, postLen;
+        uint16_t preStart, preLen;
+        uint16_t inStart, inLen;
+        uint16_t sufStart, sufLen;
+
+        read(affix, &postStart, 2);
+        read(affix, &postLen, 2);
+
+        read(affix, &preStart, 2);
+        read(affix, &preLen, 2);
+
+        read(affix, &inStart, 2);
+        read(affix, &inLen, 2);
+
+        read(affix, &sufStart, 2);
+        read(affix, &sufLen, 2);
+
+        if (postStart + postLen > postCount) {
+            errx(4, "bad postfix interval");
+        }
+
+        if (preStart + preLen > preCount) {
+            errx(5, "bad prefix interval");
+        }
+
+        if (inStart + inLen > inCount) {
+            errx(6, "bad infix interval");
+        }
+
+        if (sufStart + sufLen > sufCount) {
+            errx(7, "bad suffix interval");
+        }
+
+        uint32_t p;
+        lseek(postfix, H + postStart * 4, SEEK_SET);
+        for (int j = 0; j < postLen; j++) {
+            read(postfix, &p, 4);
+            write(out, &p, 4);
+            outCount += 4;
+        }
+
+        uint8_t pr;
+        lseek(prefix, H + preStart, SEEK_SET);
+        for (int j = 0; j < preLen; j++) {
+            read(prefix, &pr, 1);
+            write(out, &pr, 1);
+            outCount += 1;
+        }
+
+        uint16_t in;
+        lseek(infix, H + inStart * 2, SEEK_SET);
+        for (int j = 0; j < inLen; j++) {
+            read(infix, &in, 2);
+            write(out, &in, 2);
+            outCount += 2;
+        }
+
+        uint64_t s;
+        lseek(suffix, H + sufStart * 8, SEEK_SET);
+        for (int j = 0; j < sufLen; j++) {
+            read(suffix, &s, 8);
+            write(out, &s, 8);
+            outCount += 8;
+        }
+    }
+
+    lseek(out, 4, SEEK_SET);
+    write(out, &outCount, 2);
+
+    close(affix);
+    close(postfix);
+    close(prefix);
+    close(infix);
+    close(suffix);
+    close(out);
+
+    return 0;
+}
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+
+#include <unistd.h>
+#include <fcntl.h>
 #include <err.h>
 #include <stdint.h>
 #include <stdlib.h>
