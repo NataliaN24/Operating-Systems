@@ -1,4 +1,33 @@
 #!/bin/bash
+
+if [[ $# -ne 0 ]]; then
+    exit 1
+fi
+
+if [[ $(id -u) -ne 0 ]]; then
+    exit 1
+fi
+
+while IFS=: read -r name pass uid gid info homedir shell; do
+
+    if [[ ! -d "$homedir" ]]; then
+        echo "$name $uid"
+        continue
+    fi
+
+    owner_uid=$(stat -c '%u' "$homedir")
+    owner_perm=$(stat -c '%A' "$homedir" | cut -c 3)
+
+    if [[ "$uid" == "$owner_uid" && "$owner_perm" != "w" ]]; then
+        echo "$name $uid"
+    fi
+
+done < /etc/passwd
+
+
+##########################################################
+
+#!/bin/bash
 if [[ $# -ne 0 ]];then
   echo "no need for arg""
   exit 1
