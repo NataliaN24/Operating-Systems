@@ -1,6 +1,45 @@
 #!/bin/bash
 
 if [[ $# -lt 1 || $# -gt 2 ]]; then
+    exit 1
+fi
+
+dir="$1"
+out="$2"
+
+if [[ ! -d "$dir" ]]; then
+    exit 1
+fi
+
+broken=0
+
+while read -r link; do
+
+    dest=$(readlink "$link")
+
+    if [[ -e "$link" ]]; then
+        if [[ -n "$out" ]]; then
+            echo "$link -> $dest" >> "$out"
+        else
+            echo "$link -> $dest"
+        fi
+    else
+        broken=$((broken + 1))
+    fi
+
+done < <(find "$dir" -type l)
+
+if [[ -n "$out" ]]; then
+    echo "Broken symlinks: $broken" >> "$out"
+else
+    echo "Broken symlinks: $broken"
+fi
+-----------------------------------------------------
+
+
+#!/bin/bash
+
+if [[ $# -lt 1 || $# -gt 2 ]]; then
   echo "Usage: $0 DIR [OUTFILE]" >&2
   exit 1
 fi
