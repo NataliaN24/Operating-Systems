@@ -31,7 +31,7 @@ do
       touch "${dir}/${num}.txt"
       num=$(( num+1 ))
     fi
-    currnum=$(grep "^${name};" "${dir}/dict.txt" | cut -d ';' -f2)
+    currnum=$(grep "^${name};" "${dir}/dict.txt" | cut -d ':' -f2)
     echo "$line" >> "${dir}/${currnum}.txt"
 done < "${file}"
 
