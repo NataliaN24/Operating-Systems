@@ -1,5 +1,49 @@
 #!/bin/bash
 
+if [[ $# -ne 1 ]]; then
+    exit 1
+fi
+
+if [[ ! -d "$1" ]]; then
+    exit 2
+fi
+
+STATE=".statesha256"
+NEWSTATE=".stateshaNEW"
+
+mkdir -p /extracted
+touch "$STATE"
+> "$NEWSTATE"
+
+find "$1" -type f | grep -E '.*/[^/_]+_report-[0-9]+\.tgz$' | while read archive; do
+
+    filename=$(basename "$archive")
+
+    name=$(echo "$filename" | cut -d '_' -f1)
+
+    timestamp=$(echo "$filename" | cut -d '-' -f2 | cut -d '.' -f1)
+
+    hash=$(sha256sum "$archive" | cut -d ' ' -f1)
+
+    oldhash=$(grep -F "  $archive" "$STATE" | cut -d ' ' -f1)
+
+    echo "$hash  $archive" >> "$NEWSTATE"
+
+    if [[ "$oldhash" != "$hash" ]]; then
+        if tar -tzf "$archive" | grep -qx 'meow.txt'; then
+            tar -xOzf "$archive" meow.txt > "/extracted/${name}_${timestamp}.txt"
+        fi
+    fi
+
+done
+
+mv "$NEWSTATE" "$STATE"
+______________________________________________________________________________________________
+
+
+
+#!/bin/bash
+
 
 #IMPORTANT : НЕ трябва да обработва архиви, които вече са били обработени и не
 #са променени.
