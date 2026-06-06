@@ -1,6 +1,69 @@
 #!/bin/bash
 
 if [[ $# -ne 2 ]]; then
+    exit 1
+fi
+
+repo="$1"
+repoDb="$repo/db"
+repoPkg="$repo/packages"
+
+pkg="$2"
+pkgVer="$pkg/version"
+pkgTree="$pkg/tree"
+
+if [[ ! -d "$repo" ]]; then
+    exit 1
+fi
+
+if [[ ! -f "$repoDb" ]]; then
+    exit 1
+fi
+
+if [[ ! -d "$repoPkg" ]]; then
+    exit 1
+fi
+
+if [[ ! -d "$pkg" ]]; then
+    exit 1
+fi
+
+if [[ ! -f "$pkgVer" ]]; then
+    exit 1
+fi
+
+if [[ ! -d "$pkgTree" ]]; then
+    exit 1
+fi
+
+pkgname=$(basename "$pkg")
+version=$(cat "$pkgVer")
+fullName="${pkgname}-${version}"
+
+tmpArchive=$(mktemp)
+
+tar -cJf "$tmpArchive" -C "$pkgTree" .
+
+checksum=$(sha256sum "$tmpArchive" | cut -d ' ' -f1)
+
+cp "$tmpArchive" "$repoPkg/$checksum.tar.xz"
+
+tmpDb=$(mktemp)
+
+grep -v "^$fullName " "$repoDb" > "$tmpDb"
+echo "$fullName $checksum" >> "$tmpDb"
+
+sort "$tmpDb" > "$repoDb"
+
+rm "$tmpArchive"
+rm "$tmpDb"
+_________________________________________________________________________________________________________
+
+
+
+#!/bin/bash
+
+if [[ $# -ne 2 ]]; then
     echo "Usage: $0 repo package"
     exit 1
 fi
