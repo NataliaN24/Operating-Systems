@@ -1,6 +1,54 @@
 #!/bin/bash
 
 if [[ $# -ne 1 ]]; then
+    exit 1
+fi
+
+if [[ ! -d "$1" ]]; then
+    exit 2
+fi
+
+dir="$1"
+
+tmp_words=$(mktemp)
+tmp_file_words=$(mktemp)
+tmp_total=$(mktemp)
+tmp_file_counts=$(mktemp)
+
+find "$dir" -type f | while read -r file; do
+    grep -o '[a-z]\+' "$file" >> "$tmp_words"
+
+    grep -o '[a-z]\+' "$file" | sort | uniq -c | while read -r cnt word; do
+        if [[ "$cnt" -ge 3 ]]; then
+            echo "$word" >> "$tmp_file_words"
+        fi
+    done
+done
+
+files_count=$(find "$dir" -type f | wc -l)
+
+if [[ "$files_count" -eq 0 ]]; then
+    rm "$tmp_words" "$tmp_file_words" "$tmp_total" "$tmp_file_counts"
+    exit 0
+fi
+
+sort "$tmp_words" | uniq -c > "$tmp_total"
+sort "$tmp_file_words" | uniq -c > "$tmp_file_counts"
+
+while read -r file_cnt word; do
+    if [[ $((file_cnt * 2)) -ge "$files_count" ]]; then
+        total_cnt=$(grep " $word$" "$tmp_total" | tr -s ' ' | cut -d ' ' -f2)
+        echo "$total_cnt $word"
+    fi
+done < "$tmp_file_counts" | sort -nr | head -n 10 | cut -d ' ' -f2
+
+rm "$tmp_words" "$tmp_file_words" "$tmp_total" "$tmp_file_counts"
+#########################################################################################
+
+
+#!/bin/bash
+
+if [[ $# -ne 1 ]]; then
     echo "Usage: $0 <dir>" >&2
     exit 1
 fi
