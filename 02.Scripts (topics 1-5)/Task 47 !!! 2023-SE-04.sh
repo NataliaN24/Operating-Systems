@@ -1,6 +1,66 @@
 #!/bin/bash
 
 if [[ $# -ne 1 ]]; then
+    exit 1
+fi
+
+if [[ ! -d "$1" ]]; then
+    exit 2
+fi
+
+dir="$1"
+tmp=$(mktemp)
+
+find "$dir" -type f | while read -r file; do
+    hash=$(sha256sum "$file" | cut -d ' ' -f1)
+    size=$(stat -c '%s' "$file")
+    inode=$(stat -c '%i' "$file")
+
+    echo "$hash;$size;$inode;$file" >> "$tmp"
+done
+
+dedup_groups=0
+freed_bytes=0
+
+for hash in $(cut -d ';' -f1 "$tmp" | sort | uniq); do
+    count=$(grep "^$hash;" "$tmp" | wc -l)
+
+    if [[ "$count" -le 1 ]]; then
+        continue
+    fi
+
+    inode_count=$(grep "^$hash;" "$tmp" | cut -d ';' -f3 | sort | uniq | wc -l)
+
+    if [[ "$inode_count" -le 1 ]]; then
+        continue
+    fi
+
+    dedup_groups=$((dedup_groups + 1))
+
+    first_file=$(grep "^$hash;" "$tmp" | head -n 1 | cut -d ';' -f4)
+    size=$(grep "^$hash;" "$tmp" | head -n 1 | cut -d ';' -f2)
+
+    grep "^$hash;" "$tmp" | tail -n +2 | while IFS=';' read -r h s ino file; do
+        if [[ "$file" != "$first_file" ]]; then
+            rm "$file"
+            ln "$first_file" "$file"
+        fi
+    done
+
+    freed_bytes=$((freed_bytes + (inode_count - 1) * size))
+done
+
+echo "Deduplicated groups: $dedup_groups"
+echo "Freed bytes: $freed_bytes"
+
+rm "$tmp"
+################################################################################################33
+
+
+
+#!/bin/bash
+
+if [[ $# -ne 1 ]]; then
     echo "Usage: $0 <dir>" >&2
     exit 1
 fi
