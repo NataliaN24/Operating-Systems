@@ -12,10 +12,11 @@ if [[ ! -f "${ARKCONF}" ]]; then
 fi
 
 # 2) Зареждаме конфигурацията
-source "${ARKCONF}"
+WHAT=$(grep '^WHAT=' "$ARKCONF" | cut -d '=' -f2 | tr -d '"')
+WHERE=$(grep '^WHERE=' "$ARKCONF" | cut -d '=' -f2 | tr -d '"')
+WHO=$(grep '^WHO=' "$ARKCONF" | cut -d '=' -f2 | tr -d '"')
 
-# 3) Проверка дали има WHAT, WHERE, WHO
-if [[ -z "${WHAT}" || -z "${WHERE}" || -z "${WHO}" ]]; then
+if [[ -z "$WHAT" || -z "$WHERE" || -z "$WHO" ]]; then
     echo "Missing config values"
     exit 1
 fi
