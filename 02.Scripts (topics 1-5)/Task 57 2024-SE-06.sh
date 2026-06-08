@@ -1,6 +1,109 @@
 #!/bin/bash
 
 if [[ $# -ne 1 ]]; then
+    exit 1
+fi
+
+if [[ ! -f "$1" ]]; then
+    exit 2
+fi
+
+files=$(mktemp)
+nonexistant=$(mktemp)
+symlinks=$(mktemp)
+
+grep -Ew "file|dir" "$1" > "$files"
+grep -Ew "nonexistant" "$1" > "$nonexistant"
+grep -Ew "symlink" "$1" > "$symlinks"
+
+while read -r line; do
+    filename=$(echo "$line" | cut -d ' ' -f1)
+    type=$(echo "$line" | cut -d ' ' -f2)
+    userOwner=$(echo "$line" | cut -d ' ' -f3)
+    permissions=$(echo "$line" | cut -d ' ' -f4)
+
+    if [[ -z "$permissions" ]]; then
+        permissions="$userOwner"
+        userOwner=""
+    fi
+
+    if [[ "$type" == "file" ]]; then
+        if [[ -e "$filename" ]]; then
+            if [[ ! -f "$filename" ]]; then
+                rm -rf "$filename" || echo "Cannot remove $filename" >&2
+                mkdir -p "$(dirname "$filename")" || echo "Cannot create parent dir for $filename" >&2
+                touch "$filename" || echo "Cannot create file $filename" >&2
+            fi
+        else
+            mkdir -p "$(dirname "$filename")" || echo "Cannot create parent dir for $filename" >&2
+            touch "$filename" || echo "Cannot create file $filename" >&2
+        fi
+
+        chmod "$permissions" "$filename" || echo "Cannot chmod $filename" >&2
+
+        if [[ -n "$userOwner" ]]; then
+            chown "$userOwner" "$filename" || echo "Cannot chown $filename" >&2
+        fi
+
+    elif [[ "$type" == "dir" ]]; then
+        if [[ -e "$filename" ]]; then
+            if [[ ! -d "$filename" ]]; then
+                rm -rf "$filename" || echo "Cannot remove $filename" >&2
+                mkdir -p "$filename" || echo "Cannot create dir $filename" >&2
+            fi
+        else
+            mkdir -p "$filename" || echo "Cannot create dir $filename" >&2
+        fi
+
+        chmod "$permissions" "$filename" || echo "Cannot chmod $filename" >&2
+
+        if [[ -n "$userOwner" ]]; then
+            chown "$userOwner" "$filename" || echo "Cannot chown $filename" >&2
+        fi
+    fi
+
+done < "$files"
+
+while read -r line; do
+    linkname=$(echo "$line" | cut -d ' ' -f1)
+    target=$(echo "$line" | cut -d ' ' -f3)
+
+    if [[ -e "$linkname" ]]; then
+        if [[ ! -h "$linkname" ]]; then
+            rm -rf "$linkname" || echo "Cannot remove $linkname" >&2
+            mkdir -p "$(dirname "$linkname")" || echo "Cannot create parent dir for $linkname" >&2
+            ln -s "$target" "$linkname" || echo "Cannot create symlink $linkname" >&2
+        else
+            current=$(readlink "$linkname")
+            if [[ "$current" != "$target" ]]; then
+                rm "$linkname" || echo "Cannot remove symlink $linkname" >&2
+                ln -s "$target" "$linkname" || echo "Cannot recreate symlink $linkname" >&2
+            fi
+        fi
+    else
+        mkdir -p "$(dirname "$linkname")" || echo "Cannot create parent dir for $linkname" >&2
+        ln -s "$target" "$linkname" || echo "Cannot create symlink $linkname" >&2
+    fi
+
+done < "$symlinks"
+
+while read -r line; do
+    filename=$(echo "$line" | cut -d ' ' -f1)
+
+    if [[ -e "$filename" ]]; then
+        rm -rf "$filename" || echo "Cannot remove $filename" >&2
+    fi
+
+done < "$nonexistant"
+
+rm -f "$files" "$nonexistant" "$symlinks"
+#######################################################################################################################################################
+
+
+
+#!/bin/bash
+
+if [[ $# -ne 1 ]]; then
     echo "Usage: $0 <config-file>" >&2
     exit 1
 fi
