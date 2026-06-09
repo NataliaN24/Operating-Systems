@@ -1,6 +1,46 @@
 #!/bin/bash
 
 if [[ $# -ne 1 ]]; then
+    exit 1
+fi
+
+if [[ ! -d "$1" ]]; then
+    exit 2
+fi
+
+dir="$1"
+groupId=$(stat -c '%g' "$dir")
+user=$(whoami)
+
+if [[ "$user" == "root" ]]; then
+
+    find "$dir" | while read -r file; do
+
+        chgrp "$groupId" "$file"
+
+        if [[ -d "$file" ]]; then
+            chmod 2770 "$file"
+        elif [[ -f "$file" ]]; then
+            chmod ug+rw,o-rwx "$file"
+        fi
+
+    done
+
+    exit 0
+fi
+
+if ! id -G "$user" | grep -qw "$groupId"; then
+    exit 3
+fi
+
+umask 0007
+#####################################################################
+
+
+
+#!/bin/bash
+
+if [[ $# -ne 1 ]]; then
     echo "Usage: $0 <shared-dir>" >&2
     exit 1
 fi
