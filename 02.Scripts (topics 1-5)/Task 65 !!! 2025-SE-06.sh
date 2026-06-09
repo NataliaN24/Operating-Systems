@@ -10,6 +10,37 @@ if [[ ! -d "$dir" ]]; then
     exit 2
 fi
 
+data="$dir/.data"
+
+mkdir -p "$data"
+
+find "$dir" -type f ! -path "$data/*" | while read -r file; do
+    hash=$(sha256sum "$file" | cut -d ' ' -f1)
+
+    if [[ ! -e "$data/$hash" ]]; then
+        mv "$file" "$data/$hash"
+    else
+        rm "$file"
+    fi
+
+    relpath=$(realpath --relative-to="$(dirname "$file")" "$data/$hash")
+
+    ln -s "$relpath" "$file"
+done
+###########################################################################################################################
+
+#!/bin/bash
+
+if [[ $# -ne 1 ]]; then
+    exit 1
+fi
+
+dir="$1"
+
+if [[ ! -d "$dir" ]]; then
+    exit 2
+fi
+
 dataDir="$dir/.data"
 
 if [[ ! -d "$dataDir" ]]; then
