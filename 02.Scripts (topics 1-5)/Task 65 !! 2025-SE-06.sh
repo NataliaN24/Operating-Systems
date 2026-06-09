@@ -19,7 +19,7 @@ fi
 while read -r file; do
 
     # пропускаме файловете в .data
-    if [[ "$file" == "$dataDir/"* ]]; then
+    if [[ "$file" == "$dataDir/*" ]]; then
         continue
     fi
 
