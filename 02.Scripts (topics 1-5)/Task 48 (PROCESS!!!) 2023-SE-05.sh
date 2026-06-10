@@ -1,4 +1,64 @@
+#!/bin/bash
 
+limit=65536
+totalChecks=0
+
+log=$(mktemp)
+
+while true; do
+    all=$(mktemp)
+    commands=$(mktemp)
+    current=$(mktemp)
+
+    ps -eo comm=,rss= | tr -s ' ' | sed 's/^ //' > "$all"
+    ps -eo comm= | tr -s ' ' | sed 's/^ //' | sort -u > "$commands"
+
+    found=0
+    totalChecks=$((totalChecks + 1))
+
+    while read -r command; do
+        sum=0
+
+        while read -r comm rss; do
+            if [[ "$command" == "$comm" ]]; then
+                sum=$((sum + rss))
+            fi
+        done < "$all"
+
+        echo "$totalChecks $command $sum" >> "$log"
+
+        if [[ "$sum" -gt "$limit" ]]; then
+            echo "$command" >> "$current"
+            found=1
+        fi
+
+    done < "$commands"
+
+    rm "$all" "$commands" "$current"
+
+    if [[ "$found" -eq 0 ]]; then
+        break
+    fi
+
+    sleep 1
+done
+
+validChecks=$((totalChecks - 1))
+
+cut -d ' ' -f2 "$log" | sort -u | while read -r command; do
+    times=$(grep "^[0-9]\+ $command " "$log" | while read -r check cmd rss; do
+        if [[ "$rss" -gt "$limit" && "$check" -le "$validChecks" ]]; then
+            echo 1
+        fi
+    done | wc -l)
+
+    if [[ $((times * 2)) -ge "$validChecks" ]]; then
+        echo "$command"
+    fi
+done
+
+rm "$log"
+########################################################################################################################################
 #!/bin/bash
 
 limit=65536
