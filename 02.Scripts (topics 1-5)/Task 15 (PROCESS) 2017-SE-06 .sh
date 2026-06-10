@@ -1,5 +1,78 @@
 #!/bin/bash
 
+if [[ "$(whoami)" != "root" ]]; then
+    exit 1
+fi
+
+all=$(mktemp)
+rootOnly=$(mktemp)
+notRootOnly=$(mktemp)
+notRootUsers=$(mktemp)
+
+ps -eo user=,uid=,pid=,rss= | tr -s ' ' | sed 's/^ //' > "$all"
+
+grep "^root " "$all" > "$rootOnly"
+grep -v "^root " "$all" > "$notRootOnly"
+cut -d ' ' -f2 "$notRootOnly" | sort -u > "$notRootUsers"
+
+totalRSSroot=0
+
+while read -r user uid pid rss; do
+    totalRSSroot=$((totalRSSroot + rss))
+done < "$rootOnly"
+
+while read -r userID; do
+    requirementFulfilled=0
+
+    passwdLine=$(grep "^[^:]*:[^:]*:$userID:" /etc/passwd)
+
+    if [[ -z "$passwdLine" ]]; then
+        continue
+    fi
+
+    userName=$(echo "$passwdLine" | cut -d ':' -f1)
+    homeDir=$(echo "$passwdLine" | cut -d ':' -f6)
+
+    if [[ ! -d "$homeDir" ]]; then
+        requirementFulfilled=1
+    else
+        owner=$(stat -c '%u' "$homeDir")
+
+        if [[ "$userID" != "$owner" ]]; then
+            requirementFulfilled=1
+        elif [[ ! -w "$homeDir" ]]; then
+            requirementFulfilled=1
+        fi
+    fi
+
+    if [[ "$requirementFulfilled" -eq 1 ]]; then
+        totalNotRootRSS=0
+        pids=$(mktemp)
+
+        while read -r user uid pid rss; do
+            if [[ "$userID" == "$uid" ]]; then
+                totalNotRootRSS=$((totalNotRootRSS + rss))
+                echo "$pid" >> "$pids"
+            fi
+        done < "$notRootOnly"
+
+        if [[ "$totalNotRootRSS" -gt "$totalRSSroot" ]]; then
+            while read -r pid; do
+                kill -TERM "$pid"
+            done < "$pids"
+        fi
+
+        rm "$pids"
+    fi
+
+done < "$notRootUsers"
+
+rm "$all" "$rootOnly" "$notRootOnly" "$notRootUsers"
+#######################################################################################################
+
+
+#!/bin/bash
+
 if [[ "$(id -u)" -ne 0 ]]; then
     exit 1
 fi
