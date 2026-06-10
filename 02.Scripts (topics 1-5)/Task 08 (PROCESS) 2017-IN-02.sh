@@ -1,5 +1,80 @@
 #!/bin/bash
 
+if [[ $# -ne 1 ]]; then
+    exit 1
+fi
+
+if [[ "$(whoami)" != "root" ]]; then
+    exit 2
+fi
+
+userName="$1"
+
+results=$(mktemp)
+users=$(mktemp)
+fooProcc=$(mktemp)
+
+ps -eo user=,pid=,time= | tr -s ' ' | sed 's/^ //' > "$results"
+
+cut -d ' ' -f1 "$results" | sort -u > "$users"
+
+# a)
+fooNumberProcc=$(grep "^$userName " "$results" | wc -l)
+
+while read -r user; do
+    numberOfProcc=$(grep "^$user " "$results" | wc -l)
+
+    if [[ "$numberOfProcc" -gt "$fooNumberProcc" ]]; then
+        echo "$user"
+    fi
+done < "$users"
+
+# b)
+numberOfProcesses=$(cat "$results" | wc -l)
+sum=0
+
+while read -r user pid time; do
+
+    hours=$(echo "$time" | cut -d : -f1)
+    minutes=$(echo "$time" | cut -d : -f2)
+    seconds=$(echo "$time" | cut -d : -f3)
+
+    totalSeconds=$((hours * 3600 + minutes * 60 + seconds))
+
+    sum=$((sum + totalSeconds))
+
+done < "$results"
+
+avgTime=$((sum / numberOfProcesses))
+
+echo "$avgTime"
+
+# c)
+grep "^$userName " "$results" > "$fooProcc"
+
+double=$((avgTime * 2))
+
+while read -r user pid time; do
+
+    hours=$(echo "$time" | cut -d : -f1)
+    minutes=$(echo "$time" | cut -d : -f2)
+    seconds=$(echo "$time" | cut -d : -f3)
+
+    totalSeconds=$((hours * 3600 + minutes * 60 + seconds))
+
+    if [[ "$totalSeconds" -gt "$double" ]]; then
+        kill -TERM "$pid"
+    fi
+
+done < "$fooProcc"
+
+rm "$results"
+rm "$users"
+rm "$fooProcc"
+###################################################################################
+
+#!/bin/bash
+
 if [[ $# -ne 1 ]];then
   exit 1
 fi
