@@ -1,6 +1,57 @@
 #!/bin/bash
 
 if [[ $# -ne 1 ]]; then
+    exit 1
+fi
+
+arg="$1"
+
+if [[ ! "$arg" =~ ^[0-9]+$ ]]; then
+    exit 2
+fi
+
+if [[ "$(whoami)" != "root" ]]; then
+    exit 3
+fi
+
+users=$(mktemp)
+res=$(mktemp)
+
+ps -eo uid=,pid=,rss= | tr -s ' ' | sed 's/^ //' > "$res"
+ps -eo uid= | tr -s ' ' | sed 's/^ //' | sort | uniq > "$users"
+
+while read -r user; do
+    sum=0
+    maxRss=0
+    maxPid=""
+
+    while read -r uid pid rss; do
+        if [[ "$uid" == "$user" ]]; then
+            sum=$((sum + rss))
+
+            if [[ "$rss" -gt "$maxRss" ]]; then
+                maxRss="$rss"
+                maxPid="$pid"
+            fi
+        fi
+    done < "$res"
+
+    echo "$user $sum"
+
+    if [[ "$sum" -gt "$arg" ]]; then
+        kill -TERM "$maxPid"
+    fi
+
+done < "$users"
+
+rm "$users" "$res"
+###########################################################################################
+
+
+
+#!/bin/bash
+
+if [[ $# -ne 1 ]]; then
     echo "Usage: $0 <number>" >&2
     exit 1
 fi
