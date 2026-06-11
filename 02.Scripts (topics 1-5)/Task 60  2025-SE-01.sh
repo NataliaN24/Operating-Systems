@@ -19,7 +19,9 @@ withoutExtension="${filename%.*}"
 while read -r line; do
     lang=$(echo "$line" | cut -d ' ' -f1)
 
-    dirBase=$(echo "$line" | grep -o "'[^']*'")
+    #dirBase=$(echo "$line" | grep -o "'[^']*'")
+    dirBase=$(echo "$line" | awk '{print $NF}' | tr -d "'")
+
     dir="${dirBase%\'}"
     dir="${dir#\'}"
 
