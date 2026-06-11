@@ -1,5 +1,62 @@
 #!/bin/bash
 
+cmd="$1"
+path="$2"
+
+result=$($cmd)
+code=$?
+
+if [[ "$code" -ne 0 ]]; then
+    exit 3
+fi
+
+dateHour=$(date '+%Y-%m-%d %H')
+hour=$(date '+%H')
+weekday=$(date '+%w')
+
+sum=0
+count=0
+
+if [[ -f "$path" ]]; then
+    while read -r timestamp; do
+        time1=$(echo "$timestamp" | cut -d ' ' -f4)
+        dayLine=$(echo "$timestamp" | cut -d ' ' -f5)
+        val=$(echo "$timestamp" | cut -d ' ' -f6)
+
+        if [[ "$time1" -eq "$hour" ]]; then
+            if [[ "$dayLine" -eq "$weekday" ]]; then
+                sum=$(echo "$sum + $val" | bc)
+                count=$((count + 1))
+            fi
+        fi
+    done < "$path"
+fi
+
+if [[ "$count" -gt 0 ]]; then
+    avg=$(echo "scale=4; $sum / $count" | bc)
+
+    lower=$(echo "scale=4; $avg / 2" | bc)
+    upper=$(echo "scale=4; $avg * 2" | bc)
+
+    isLow=$(echo "$result < $lower" | bc)
+    isHigh=$(echo "$result > $upper" | bc)
+
+  if [[ "$isLow" -eq 1 || "$isHigh" -eq 1 ]]; then
+    echo "$dateHour: $result abnormal"
+    echo "$(date '+%Y %m %d %H %w') $result" >> "$path"
+    exit 2
+fi
+fi
+
+echo "$(date '+%Y %m %d %H %w') $result" >> "$path"
+exit 0
+
+###############################################################3
+
+
+
+#!/bin/bash
+
 # check for args
 if [[ $# -ne 2 ]]; then
     exit 1
