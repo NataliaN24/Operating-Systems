@@ -1,3 +1,114 @@
+#include <stdint.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <err.h>
+
+int main(int argc, char* argv[])
+{
+    if (argc != 5) {
+        errx(1, "usage: %s f1.dat f1.idx f2.dat f2.idx", argv[0]);
+    }
+
+    int f1dat = open(argv[1], O_RDONLY);
+    if (f1dat < 0) err(2, "open f1.dat");
+
+    int f1idx = open(argv[2], O_RDONLY);
+    if (f1idx < 0) err(2, "open f1.idx");
+
+    int f2dat = open(argv[3], O_CREAT | O_TRUNC | O_WRONLY, 0644);
+    if (f2dat < 0) err(2, "open f2.dat");
+
+    int f2idx = open(argv[4], O_CREAT | O_TRUNC | O_WRONLY, 0644);
+    if (f2idx < 0) err(2, "open f2.idx");
+
+    off_t datSize = lseek(f1dat, 0, SEEK_END);
+    if (datSize < 0) err(3, "lseek dat size");
+
+    off_t idxSize = lseek(f1idx, 0, SEEK_END);
+    if (idxSize < 0) err(3, "lseek idx size");
+
+    if (idxSize % 4 != 0) {
+        errx(4, "invalid idx size");
+    }
+
+    if (lseek(f1idx, 0, SEEK_SET) < 0) err(3, "lseek idx start");
+
+    uint16_t off;
+    uint8_t len;
+    uint8_t reserved;
+    uint16_t newOff = 0;
+
+    while (read(f1idx, &off, sizeof(off)) == sizeof(off)) {
+        if (read(f1idx, &len, sizeof(len)) != sizeof(len)) {
+            err(5, "read len");
+        }
+
+        if (read(f1idx, &reserved, sizeof(reserved)) != sizeof(reserved)) {
+            err(5, "read reserved");
+        }
+
+        if (len == 0) {
+            errx(6, "invalid length");
+        }
+
+        if ((off_t)off + len > datSize) {
+            errx(6, "invalid offset/length");
+        }
+
+        if (lseek(f1dat, off, SEEK_SET) < 0) {
+            err(7, "lseek dat");
+        }
+
+        uint8_t first;
+        if (read(f1dat, &first, sizeof(first)) != sizeof(first)) {
+            err(7, "read first");
+        }
+
+        if (first >= 'A' && first <= 'Z') {
+            if (lseek(f1dat, off, SEEK_SET) < 0) {
+                err(7, "lseek dat again");
+            }
+
+            for (uint8_t i = 0; i < len; i++) {
+                uint8_t byte;
+
+                if (read(f1dat, &byte, sizeof(byte)) != sizeof(byte)) {
+                    err(8, "read byte");
+                }
+
+                if (write(f2dat, &byte, sizeof(byte)) != sizeof(byte)) {
+                    err(8, "write byte");
+                }
+            }
+
+            if (write(f2idx, &newOff, sizeof(newOff)) != sizeof(newOff)) {
+                err(8, "write new offset");
+            }
+
+            if (write(f2idx, &len, sizeof(len)) != sizeof(len)) {
+                err(8, "write len");
+            }
+
+            reserved = 0;
+
+            if (write(f2idx, &reserved, sizeof(reserved)) != sizeof(reserved)) {
+                err(8, "write reserved");
+            }
+
+            newOff += len;
+        }
+    }
+
+    close(f1dat);
+    close(f1idx);
+    close(f2dat);
+    close(f2idx);
+
+    return 0;
+}
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
 #include <unistd.h>
 #include <fcntl.h>
 #include <stdint.h>
