@@ -24,6 +24,168 @@ int main(int argc, char* argv[])
 
     uint16_t affixCount, postCount, preCount, inCount, sufCount;
 
+    if (lseek(affix, 4, SEEK_SET) < 0) err(3, "lseek");
+    if (read(affix, &affixCount, sizeof(affixCount)) != sizeof(affixCount)) err(3, "read");
+
+    if (lseek(postfix, 4, SEEK_SET) < 0) err(3, "lseek");
+    if (read(postfix, &postCount, sizeof(postCount)) != sizeof(postCount)) err(3, "read");
+
+    if (lseek(prefix, 4, SEEK_SET) < 0) err(3, "lseek");
+    if (read(prefix, &preCount, sizeof(preCount)) != sizeof(preCount)) err(3, "read");
+
+    if (lseek(infix, 4, SEEK_SET) < 0) err(3, "lseek");
+    if (read(infix, &inCount, sizeof(inCount)) != sizeof(inCount)) err(3, "read");
+
+    if (lseek(suffix, 4, SEEK_SET) < 0) err(3, "lseek");
+    if (read(suffix, &sufCount, sizeof(sufCount)) != sizeof(sufCount)) err(3, "read");
+
+    if (affixCount % 8 != 0) {
+        errx(4, "bad affix count");
+    }
+
+    uint8_t header[H] = {0};
+
+    if (write(out, header, sizeof(header)) != sizeof(header)) {
+        err(5, "write header");
+    }
+
+    if (lseek(affix, H, SEEK_SET) < 0) {
+        err(6, "lseek affix");
+    }
+
+    uint16_t outCount = 0;
+
+    for (int i = 0; i < affixCount / 8; i++)
+    {
+        uint16_t postStart, postLen;
+        uint16_t preStart, preLen;
+        uint16_t inStart, inLen;
+        uint16_t sufStart, sufLen;
+
+        if (read(affix, &postStart, sizeof(postStart)) != sizeof(postStart)) err(7, "read affix");
+        if (read(affix, &postLen, sizeof(postLen)) != sizeof(postLen)) err(7, "read affix");
+
+        if (read(affix, &preStart, sizeof(preStart)) != sizeof(preStart)) err(7, "read affix");
+        if (read(affix, &preLen, sizeof(preLen)) != sizeof(preLen)) err(7, "read affix");
+
+        if (read(affix, &inStart, sizeof(inStart)) != sizeof(inStart)) err(7, "read affix");
+        if (read(affix, &inLen, sizeof(inLen)) != sizeof(inLen)) err(7, "read affix");
+
+        if (read(affix, &sufStart, sizeof(sufStart)) != sizeof(sufStart)) err(7, "read affix");
+        if (read(affix, &sufLen, sizeof(sufLen)) != sizeof(sufLen)) err(7, "read affix");
+
+        if ((uint32_t)postStart + postLen > postCount) {
+            errx(8, "bad postfix interval");
+        }
+
+        if ((uint32_t)preStart + preLen > preCount) {
+            errx(9, "bad prefix interval");
+        }
+
+        if ((uint32_t)inStart + inLen > inCount) {
+            errx(10, "bad infix interval");
+        }
+
+        if ((uint32_t)sufStart + sufLen > sufCount) {
+            errx(11, "bad suffix interval");
+        }
+
+        uint32_t p;
+
+        if (lseek(postfix, H + postStart * sizeof(uint32_t), SEEK_SET) < 0) {
+            err(12, "lseek postfix");
+        }
+
+        for (int j = 0; j < postLen; j++) {
+            if (read(postfix, &p, sizeof(p)) != sizeof(p)) err(13, "read postfix");
+            if (write(out, &p, sizeof(p)) != sizeof(p)) err(14, "write out");
+            outCount += sizeof(p);
+        }
+
+        uint8_t pr;
+
+        if (lseek(prefix, H + preStart * sizeof(uint8_t), SEEK_SET) < 0) {
+            err(15, "lseek prefix");
+        }
+
+        for (int j = 0; j < preLen; j++) {
+            if (read(prefix, &pr, sizeof(pr)) != sizeof(pr)) err(16, "read prefix");
+            if (write(out, &pr, sizeof(pr)) != sizeof(pr)) err(17, "write out");
+            outCount += sizeof(pr);
+        }
+
+        uint16_t in;
+
+        if (lseek(infix, H + inStart * sizeof(uint16_t), SEEK_SET) < 0) {
+            err(18, "lseek infix");
+        }
+
+        for (int j = 0; j < inLen; j++) {
+            if (read(infix, &in, sizeof(in)) != sizeof(in)) err(19, "read infix");
+            if (write(out, &in, sizeof(in)) != sizeof(in)) err(20, "write out");
+            outCount += sizeof(in);
+        }
+
+        uint64_t s;
+
+        if (lseek(suffix, H + sufStart * sizeof(uint64_t), SEEK_SET) < 0) {
+            err(21, "lseek suffix");
+        }
+
+        for (int j = 0; j < sufLen; j++) {
+            if (read(suffix, &s, sizeof(s)) != sizeof(s)) err(22, "read suffix");
+            if (write(out, &s, sizeof(s)) != sizeof(s)) err(23, "write out");
+            outCount += sizeof(s);
+        }
+    }
+
+    if (lseek(out, 4, SEEK_SET) < 0) {
+        err(24, "lseek out");
+    }
+
+    if (write(out, &outCount, sizeof(outCount)) != sizeof(outCount)) {
+        err(25, "write count");
+    }
+
+    close(affix);
+    close(postfix);
+    close(prefix);
+    close(infix);
+    close(suffix);
+    close(out);
+
+    return 0;
+}
+//////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+
+#include <unistd.h>
+#include <fcntl.h>
+#include <stdint.h>
+#include <err.h>
+
+#define H 16
+
+int main(int argc, char* argv[])
+{
+    if (argc != 7) {
+        errx(1, "Usage: %s affix postfix prefix infix suffix crucifixus", argv[0]);
+    }
+
+    int affix = open(argv[1], O_RDONLY);
+    int postfix = open(argv[2], O_RDONLY);
+    int prefix = open(argv[3], O_RDONLY);
+    int infix = open(argv[4], O_RDONLY);
+    int suffix = open(argv[5], O_RDONLY);
+    int out = open(argv[6], O_WRONLY | O_CREAT | O_TRUNC, 0644);
+
+    if (affix < 0 || postfix < 0 || prefix < 0 || infix < 0 || suffix < 0 || out < 0) {
+        err(2, "open");
+    }
+
+    uint16_t affixCount, postCount, preCount, inCount, sufCount;
+
     lseek(affix, 4, SEEK_SET);
     read(affix, &affixCount, sizeof(affixCount));
 
