@@ -1,6 +1,98 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <string.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <err.h>
+
+int line = 1;
+int numbering = 0;
+
+void printFile(int fd)
+{
+    char ch;
+    ssize_t bytesRead;
+    int beginning = 1;
+
+    while ((bytesRead = read(fd, &ch, sizeof(ch))) > 0)
+    {
+        if (numbering && beginning)
+        {
+            char buff[32];
+            int len = snprintf(buff, sizeof(buff), "%d ", line);
+
+            if (write(1, buff, len) != len)
+            {
+                err(1, "write");
+            }
+
+            line++;
+            beginning = 0;
+        }
+
+        if (write(1, &ch, sizeof(ch)) != sizeof(ch))
+        {
+            err(1, "write");
+        }
+
+        if (ch == '\n')
+        {
+            beginning = 1;
+        }
+    }
+
+    if (bytesRead == -1)
+    {
+        err(1, "read");
+    }
+}
+
+int main(int argc, char* argv[])
+{
+    int start = 1;
+
+    if (argc > 1 && strcmp(argv[1], "-n") == 0)
+    {
+        numbering = 1;
+        start = 2;
+    }
+
+    if (start == argc)
+    {
+        printFile(0);
+        return 0;
+    }
+
+    for (int i = start; i < argc; i++)
+    {
+        if (strcmp(argv[i], "-") == 0)
+        {
+            printFile(0);
+        }
+        else
+        {
+            int fd = open(argv[i], O_RDONLY);
+
+            if (fd == -1)
+            {
+                warn("%s", argv[i]);
+                continue;
+            }
+
+            printFile(fd);
+            close(fd);
+        }
+    }
+
+    return 0;
+}
+//////////////////////////////////////////////////////////////////////////////
+
+
+
+#include <unistd.h>
+#include <fcntl.h>
+#include <string.h>
 #include <err.h>
 
 void print_num(int n)
