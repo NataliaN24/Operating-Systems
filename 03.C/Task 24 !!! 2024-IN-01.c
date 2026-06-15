@@ -94,12 +94,16 @@ int main(int argc, char* argv[])
         }
     }
 
-    if (sum_size == 0) {
-        printf("0.000000\n");
-    } else {
-        double result = (double)sum_ssize / (double)sum_size;
-        printf("%.6f\n", result);
-    }
+   char buf[32];
+int len;
+
+if (sum_size == 0) {
+    len = snprintf(buf, sizeof(buf), "0.000000\n");
+} else {
+    double result = (double)sum_ssize / (double)sum_size;
+    len = snprintf(buf, sizeof(buf), "%.6f\n", result);
+}
+write(1, buf, len);
 
     free(objects);
     close(fd);
