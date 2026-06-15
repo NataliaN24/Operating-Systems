@@ -78,7 +78,9 @@ int main(int argc, char* argv[])
             continue;
         }
 
-        object parent = objects[current.parent_id];
+      //  object parent = objects[current.parent_id];
+        uint16_t pid = current.parent_id;
+    Object parent = objects[pid];
 
         if (current.ctime < parent.ctime) {
             continue;
