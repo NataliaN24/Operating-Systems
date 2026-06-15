@@ -119,14 +119,22 @@ int main(int argc, const char* argv[])
         err(6, "Read");
     }
 
-    struct stat info_encrypted;
-    if(fstat(encrypted, &info_encrypted) < 0){
-        err(7, "Error");
-    }
+   // struct stat info_encrypted;
+    //if(fstat(encrypted, &info_encrypted) < 0){
+      //  err(7, "Error");
+   // }
 
-    if(info_encrypted.st_size != bytesCount){
-        err(8, "Logical error");
-    }
+   // if(info_encrypted.st_size != bytesCount){
+    //    err(8, "Logical error");
+  //  }
+    off_t size = lseek(encrypted, 0, SEEK_END);
+if(size < 0){
+    err(7, "lseek");
+}
+
+if((uint32_t)size != bytesCount){
+    err(8, "Logical error");
+}
 
     for(int i = 0; i < 4; i++)
     {
