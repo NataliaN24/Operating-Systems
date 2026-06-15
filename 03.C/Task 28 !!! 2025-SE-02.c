@@ -1,6 +1,109 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <stdint.h>
+#include <stdlib.h>
+#include <err.h>
+#include <stdio.h>
+#include <string.h>
+#include <stdbool.h>
+
+int main(int argc, char* argv[])
+{
+    if (argc != 4)
+    {
+        errx(1, "Usage: %s index values name", argv[0]);
+    }
+
+    int index = open(argv[1], O_RDONLY);
+    if (index < 0)
+    {
+        err(1, "open index");
+    }
+
+    int val = open(argv[2], O_RDONLY);
+    if (val < 0)
+    {
+        err(1, "open values");
+    }
+
+    uint8_t header;
+    int recIndex = 0;
+
+    while (read(index, &header, sizeof(header)) == sizeof(header))
+    {
+        uint8_t len = header & 0x7F;
+        uint8_t type = (header >> 7) & 1;
+
+        char text[len + 1];
+
+        if (read(index, text, len) != len)
+        {
+            errx(1, "bad index file");
+        }
+
+        text[len] = '\0';
+
+        if (strcmp(text, argv[3]) == 0)
+        {
+            if (lseek(val, recIndex * 4, SEEK_SET) < 0)
+            {
+                err(1, "lseek");
+            }
+
+           if (type == 0)
+{
+    int32_t x;
+
+    if (read(val, &x, sizeof(x)) != sizeof(x))
+    {
+        errx(1, "bad values file");
+    }
+
+    char buff[32];
+
+    int len = snprintf(buff, sizeof(buff), "%d\n", x);
+
+    if (write(1, buff, len) != len)
+    {
+        err(1, "write");
+    }
+}
+else
+{
+    float f;
+
+    if (read(val, &f, sizeof(f)) != sizeof(f))
+    {
+        errx(1, "bad values file");
+    }
+
+    char buff[64];
+
+    int len = snprintf(buff, sizeof(buff), "%.3f\n", f);
+
+    if (write(1, buff, len) != len)
+    {
+        err(1, "write");
+    }
+}
+            close(index);
+            close(val);
+            return 0;
+        }
+
+        recIndex++;
+    }
+
+    errx(1, "record not found");
+}
+
+
+
+
+
+#include <unistd.h>
+#include <fcntl.h>
+#include <stdint.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <err.h>
