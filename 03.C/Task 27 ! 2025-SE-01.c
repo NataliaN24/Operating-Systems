@@ -1,3 +1,108 @@
+#include <stdio.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <string.h>
+
+typedef struct {
+    uint64_t timestamp;
+    char role[256];
+    char text[256];
+} Record;
+
+int cmp(const void *a, const void *b) {
+    const Record *x = (const Record *)a;
+    const Record *y = (const Record *)b;
+
+    if (x->timestamp < y->timestamp) return -1;
+    if (x->timestamp > y->timestamp) return 1;
+    return 0;
+}
+
+int main(int argc, const char *argv[]) {
+    if (argc < 2 || argc > 21) {
+        return 1;
+    }
+
+    Record *arr = malloc(100000 * sizeof(Record));
+    if (!arr) return 1;
+
+    int count = 0;
+
+    for (int i = 1; i < argc; i++) {
+        int fd = open(argv[i], O_RDONLY);
+        if (fd < 0) continue;
+
+        uint64_t headerId;
+
+        if (read(fd, &headerId, sizeof(headerId)) != sizeof(headerId)) {
+            close(fd);
+            continue;
+        }
+
+        uint8_t nameLen;
+        if (read(fd, &nameLen, 1) != 1) {
+            close(fd);
+            continue;
+        }
+
+        char role[256];
+        if (nameLen >= 256) {
+            close(fd);
+            continue;
+        }
+
+        if (read(fd, role, nameLen) != nameLen) {
+            close(fd);
+            continue;
+        }
+        role[nameLen] = '\0';
+
+        // read messages
+        while (1) {
+            uint64_t timestamp;
+            uint8_t N;
+            char text[256];
+
+            if (read(fd, &timestamp, sizeof(timestamp)) != sizeof(timestamp))
+                break;
+
+            if (read(fd, &N, 1) != 1)
+                break;
+
+            if (N >= 256)
+                break;
+
+            if (read(fd, text, N) != N)
+                break;
+
+            text[N] = '\0';
+
+            arr[count].timestamp = timestamp;
+            strcpy(arr[count].role, role);
+            strcpy(arr[count].text, text);
+
+            count++;
+        }
+
+        close(fd);
+    }
+
+    // sort globally by timestamp
+    qsort(arr, count, sizeof(Record), cmp);
+
+    // print result
+    for (int i = 0; i < count; i++) {
+        printf("%s: %s\n", arr[i].role, arr[i].text);
+    }
+
+    free(arr);
+    return 0;
+}
+
+
+////////////////////////////////////////////////////////////////////////////
 #include <unistd.h>
 #include <fcntl.h>
 #include <stdint.h>
