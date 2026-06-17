@@ -1,5 +1,110 @@
 #include <unistd.h>
 #include <stdlib.h>
+#include <err.h>
+#include <sys/wait.h>
+#include <fcntl.h>
+#include <string.h>
+
+int main(int argc, char* argv[])
+{
+    if (argc != 2) {
+        errx(1, "usage: %s dir", argv[0]);
+    }
+
+    int fd1[2];
+
+    if (pipe(fd1) < 0) {
+        err(1, "pipe");
+    }
+
+    pid_t pid = fork();
+
+    if (pid < 0) {
+        err(1, "fork");
+    }
+
+    if (pid == 0) {
+        close(fd1[0]);
+
+        if (dup2(fd1[1], 1) < 0) {
+            err(1, "dup2");
+        }
+
+        close(fd1[1]);
+
+        execlp(
+            "find",
+            "find",
+            argv[1],
+            "-type",
+            "f",
+            "!",
+            "-name",
+            "*.hash",
+            (char*)NULL
+        );
+
+        err(1, "execlp find");
+    }
+
+    close(fd1[1]);
+
+    char name[4096];
+    char ch;
+    int len = 0;
+
+    while (read(fd1[0], &ch, sizeof(ch)) == sizeof(ch)) {
+        if (ch == '\n') {
+            name[len] = '\0';
+
+            char hashname[5000];
+
+            strcpy(hashname, name);
+            strcat(hashname, ".hash");
+
+            pid_t pid2 = fork();
+
+            if (pid2 < 0) {
+                err(1, "fork");
+            }
+
+            if (pid2 == 0) {
+                int out = open(hashname, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+
+                if (out < 0) {
+                    err(1, "open hash file");
+                }
+
+                if (dup2(out, 1) < 0) {
+                    err(1, "dup2");
+                }
+
+                close(out);
+                close(fd1[0]);
+
+                execlp("md5sum", "md5sum", name, (char*)NULL);
+
+                err(1, "execlp md5sum");
+            }
+
+            len = 0;
+        } else {
+            name[len] = ch;
+            len++;
+        }
+    }
+
+    close(fd1[0]);
+
+    while (wait(NULL) > 0) {
+    }
+
+    exit(0);
+}
+/////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#include <unistd.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/wait.h>
 #include <fcntl.h>
