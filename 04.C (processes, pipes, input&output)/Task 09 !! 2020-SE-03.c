@@ -5,6 +5,116 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <sys/wait.h>
+
+int main(int argc, char* argv[])
+{
+    if (argc != 2) {
+        errx(1, "usage: %s file", argv[0]);
+    }
+
+    int fd = open(argv[1], O_RDONLY);
+    if (fd < 0) {
+        err(1, "open input");
+    }
+
+    int wire[2];
+    if (pipe(wire) < 0) {
+        err(1, "pipe");
+    }
+
+    char filename[8];
+    uint32_t offset;
+    uint32_t len;
+
+    while (read(fd, filename, sizeof(filename)) == sizeof(filename) &&
+           read(fd, &offset, sizeof(offset)) == sizeof(offset) &&
+           read(fd, &len, sizeof(len)) == sizeof(len)) {
+
+        pid_t pid = fork();
+        if (pid < 0) {
+            err(1, "fork");
+        }
+
+        if (pid == 0) {
+            close(wire[0]);
+            close(fd);
+
+            int currFd = open(filename, O_RDONLY);
+            if (currFd < 0) {
+                err(1, "open data file");
+            }
+
+            if (lseek(currFd, offset * sizeof(uint16_t), SEEK_SET) < 0) {
+                err(1, "lseek");
+            }
+
+            uint16_t res = 0;
+            uint16_t element;
+
+            for (uint32_t i = 0; i < len; i++) {
+                if (read(currFd, &element, sizeof(element)) != sizeof(element)) {
+                    err(1, "read element");
+                }
+
+                res ^= element;
+            }
+
+            if (write(wire[1], &res, sizeof(res)) != sizeof(res)) {
+                err(1, "write pipe");
+            }
+
+            close(currFd);
+            close(wire[1]);
+
+            exit(0);
+        }
+    }
+
+    close(fd);
+    close(wire[1]);
+
+    uint16_t finalRes = 0;
+    uint16_t currRes;
+    ssize_t readBytes;
+
+    while ((readBytes = read(wire[0], &currRes, sizeof(currRes))) > 0) {
+        if (readBytes != sizeof(currRes)) {
+            errx(1, "partial read from pipe");
+        }
+
+        finalRes ^= currRes;
+    }
+
+    if (readBytes < 0) {
+        err(1, "read pipe");
+    }
+
+    close(wire[0]);
+
+    while (wait(NULL) > 0) {
+        // чакаме всички child процеси
+    }
+
+    char buff[64];
+    int n = snprintf(buff, sizeof(buff), "result: %04X\n", finalRes);
+
+    if (write(1, buff, n) != n) {
+        err(1, "write stdout");
+    }
+
+    return 0;
+}
+///////////////////////////////////////////////////////////////////////////////////////////
+
+
+#include <fcntl.h>
+#include <err.h>
+#include <unistd.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
 #include <stdbool.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
