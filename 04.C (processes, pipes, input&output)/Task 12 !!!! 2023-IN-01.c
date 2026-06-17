@@ -1,3 +1,118 @@
+#include <unistd.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include <err.h>
+#include <sys/wait.h>
+
+int main(int argc, char* argv[])
+{
+    if (argc != 3) {
+        errx(1, "usage: %s NC WC", argv[0]);
+    }
+
+    int NC = atoi(argv[1]);
+    int WC = atoi(argv[2]);
+
+    if (NC < 1 || NC > 7 || WC < 1 || WC > 35) {
+        errx(1, "invalid arguments");
+    }
+
+    const char* words[] = {
+        "tic ",
+        "tac ",
+        "toe\n"
+    };
+
+    int totalProcesses = NC + 1;
+
+    int pipes[8][2];
+
+    for (int i = 0; i < totalProcesses; i++) {
+        if (pipe(pipes[i]) < 0) {
+            err(1, "pipe");
+        }
+    }
+
+    for (int i = 1; i <= NC; i++) {
+        pid_t pid = fork();
+
+        if (pid < 0) {
+            err(1, "fork");
+        }
+
+        if (pid == 0) {
+            int id = i;
+
+            for (int j = 0; j < totalProcesses; j++) {
+                if (j != id) {
+                    close(pipes[j][0]);
+                }
+
+                if (j != (id + 1) % totalProcesses) {
+                    close(pipes[j][1]);
+                }
+            }
+
+            int num;
+
+            while (read(pipes[id][0], &num, sizeof(num)) == sizeof(num)) {
+                if (num >= WC) {
+                    int next = num;
+                    write(pipes[(id + 1) % totalProcesses][1], &next, sizeof(next));
+                    break;
+                }
+
+                write(1, words[num % 3], 4);
+
+                num++;
+                write(pipes[(id + 1) % totalProcesses][1], &num, sizeof(num));
+            }
+
+            close(pipes[id][0]);
+            close(pipes[(id + 1) % totalProcesses][1]);
+
+            exit(0);
+        }
+    }
+
+    int id = 0;
+
+    for (int j = 0; j < totalProcesses; j++) {
+        if (j != id) {
+            close(pipes[j][0]);
+        }
+
+        if (j != (id + 1) % totalProcesses) {
+            close(pipes[j][1]);
+        }
+    }
+
+    int num = 0;
+    write(pipes[0][1], &num, sizeof(num)); //only for the start
+
+    while (read(pipes[0][0], &num, sizeof(num)) == sizeof(num)) {
+        if (num >= WC) {
+            write(pipes[1][1], &num, sizeof(num));
+            break;
+        }
+
+        write(1, words[num % 3], 4);
+
+        num++;
+        write(pipes[1][1], &num, sizeof(num));
+    }
+
+    close(pipes[0][0]);
+    close(pipes[1][1]);
+
+    for (int i = 0; i < NC; i++) {
+        wait(NULL);
+    }
+
+    exit(0);
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 #include <unistd.h>
 #include <sys/wait.h>
@@ -111,10 +226,6 @@ int main(int argc, char* argv[])
     return 0;
 }
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-
-
-
 
 
 
