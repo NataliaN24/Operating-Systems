@@ -1,4 +1,96 @@
+#include <unistd.h>
+#include <sys/wait.h>
+#include <signal.h>
+#include <stdlib.h>
+#include <err.h>
 
+int main(int argc, char* argv[])
+{
+    if (argc < 2 || argc > 11) {
+        errx(1, "invalid arguments");
+    }
+
+    int n = argc - 1;
+
+    pid_t pids[10];
+    int done[10] = {0};
+    int remaining = n;
+
+    for (int i = 0; i < n; i++) {
+        pid_t child = fork();
+
+        if (child < 0) {
+            err(1, "fork");
+        }
+
+        if (child == 0) {
+            execlp(argv[i + 1], argv[i + 1], (char*)NULL);
+            err(1, "exec");
+        }
+
+        pids[i] = child;
+    }
+
+    while (remaining > 0) {
+        int status;
+
+        pid_t finished = wait(&status);
+
+        if (finished < 0) {
+            err(1, "wait");
+        }
+
+        int index = -1;
+
+        for (int i = 0; i < n; i++) {
+            if (pids[i] == finished) {
+                index = i;
+                break;
+            }
+        }
+
+        if (index == -1) {
+            errx(1, "unknown child");
+        }
+
+        if (WIFEXITED(status) && WEXITSTATUS(status) == 0) {
+            done[index] = 1;
+            remaining--;
+        }
+        else if (WIFEXITED(status) && WEXITSTATUS(status) != 0) {
+            pid_t child = fork();
+
+            if (child < 0) {
+                err(1, "fork");
+            }
+
+            if (child == 0) {
+                execlp(argv[index + 1], argv[index + 1], (char*)NULL);
+                err(1, "exec");
+            }
+
+            pids[index] = child;
+        }
+        else if (WIFSIGNALED(status)) {
+            for (int i = 0; i < n; i++) {
+                if (i != index && !done[i]) {
+                    kill(pids[i], SIGTERM);
+                }
+            }
+
+            for (int i = 0; i < n; i++) {
+                if (i != index && !done[i]) {
+                    waitpid(pids[i], NULL, 0);
+                }
+            }
+
+            exit(index + 1);
+        }
+    }
+
+    exit(0);
+}
+//////////////////////////////////////////////////////////////////////////////////////////
 #include <unistd.h>
 #include <sys/wait.h>
 #include <signal.h>
