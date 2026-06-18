@@ -1,5 +1,159 @@
 #include <unistd.h>
 #include <fcntl.h>
+#include <sys/wait.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <err.h>
+
+int main(int argc, char* argv[])
+{
+    if (argc != 2) {
+        errx(1, "usage: %s input.bin", argv[0]);
+    }
+
+    int fd = open(argv[1], O_RDONLY);
+    if (fd < 0) {
+        err(1, "open input");
+    }
+
+    uint16_t ramSize;
+    uint16_t regCnt;
+    char fname[8];
+
+    while (read(fd, &ramSize, sizeof(ramSize)) == sizeof(ramSize))
+    {
+        if (read(fd, &regCnt, sizeof(regCnt)) != sizeof(regCnt) ||
+            read(fd, fname, sizeof(fname)) != sizeof(fname))
+        {
+            errx(1, "bad input.bin");
+        }
+
+        if (ramSize > 512 || regCnt > 32) {
+            errx(1, "invalid cpu limits");
+        }
+
+        if (fname[7] != '\0') {
+            errx(1, "filename not null terminated");
+        }
+
+        pid_t pid = fork();
+        if (pid < 0) {
+            err(1, "fork");
+        }
+
+        if (pid == 0)
+        {
+            int fileFD = open(fname, O_RDWR);
+            if (fileFD < 0) {
+                err(1, "open cpu file");
+            }
+
+            uint8_t reg[32];
+            uint8_t ram[512];
+
+            if (read(fileFD, reg, regCnt) != regCnt ||
+                read(fileFD, ram, ramSize) != ramSize)
+            {
+                errx(1, "bad cpu file");
+            }
+
+            uint8_t opcode, op1, op2, op3;
+
+            while (read(fileFD, &opcode, 1) == 1)
+            {
+                if (read(fileFD, &op1, 1) != 1 ||
+                    read(fileFD, &op2, 1) != 1 ||
+                    read(fileFD, &op3, 1) != 1)
+                {
+                    errx(1, "bad instruction");
+                }
+
+                switch (opcode)
+                {
+                    case 0: // AND
+                        reg[op1] = reg[op2] & reg[op3];
+                        break;
+
+                    case 1: // OR
+                        reg[op1] = reg[op2] | reg[op3];
+                        break;
+
+                    case 2: // ADD
+                        reg[op1] = reg[op2] + reg[op3];
+                        break;
+
+                    case 3: // MULTIPLY
+                        reg[op1] = reg[op2] * reg[op3];
+                        break;
+
+                    case 4: // XOR
+                        reg[op1] = reg[op2] ^ reg[op3];
+                        break;
+
+                    case 5: // PRINT
+                        if (write(1, &reg[op1], 1) != 1) {
+                            err(1, "write");
+                        }
+                        break;
+
+                    case 6: // SLEEP
+                        sleep(reg[op1]);
+                        break;
+
+                    case 7: // LOAD
+                        reg[op1] = ram[reg[op2]];
+                        break;
+
+                    case 8: // STORE
+                        ram[reg[op2]] = reg[op1];
+                        break;
+
+                    case 9: // JNE
+                        if (reg[op1] != reg[op2]) {
+                            if (lseek(fileFD, op3 * 4, SEEK_CUR) < 0) {
+                                err(1, "lseek JNE");
+                            }
+                        }
+                        break;
+
+                    case 10: // LOADI
+                        reg[op1] = op2;
+                        break;
+
+                    case 11: // STOREI
+                        ram[reg[op1]] = op2;
+                        break;
+
+                    default:
+                        errx(1, "unknown opcode");
+                }
+            }
+
+            if (lseek(fileFD, 0, SEEK_SET) < 0) {
+                err(1, "lseek start");
+            }
+
+            if (write(fileFD, reg, regCnt) != regCnt ||
+                write(fileFD, ram, ramSize) != ramSize)
+            {
+                err(1, "write result");
+            }
+
+            close(fileFD);
+            exit(0);
+        }
+    }
+
+    close(fd);
+
+    while (wait(NULL) > 0)
+        ;
+
+    return 0;
+}
+//////////////////////////////////////////////////////////////////////////////////////////////
+#include <unistd.h>
+#include <fcntl.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <sys/wait.h>
