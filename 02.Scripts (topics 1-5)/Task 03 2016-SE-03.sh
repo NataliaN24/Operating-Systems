@@ -1,5 +1,65 @@
 #!/bin/bash
 
+# Проверка дали се изпълнява като root
+if [[ $(id -u) -ne 0 ]]; then
+    exit 1
+fi
+
+while IFS=: read -r username uid gid home; do
+
+    # Проверка дали home директорията съществува
+    if [[ ! -d "$home" ]]; then
+        echo "user: $username (no homedir)"
+        continue
+    fi
+
+    # Вземаме UID, GID и правата на директорията
+    info=$(stat -c '%u %g %A' "$home")
+
+    homeuid=$(echo "$info" | cut -d' ' -f1)
+    homegid=$(echo "$info" | cut -d' ' -f2)
+    perm=$(echo "$info" | cut -d' ' -f3)
+
+    writable=false
+
+    # Ако потребителят е собственик
+    if [[ "$uid" == "$homeuid" ]]; then
+
+        ownerPerm=$(echo "$perm" | cut -c2-4)
+
+        if [[ "$ownerPerm" == *w* ]]; then
+            writable=true
+        fi
+
+    # Ако потребителят е в групата
+    elif [[ "$gid" == "$homegid" ]]; then
+
+        groupPerm=$(echo "$perm" | cut -c5-7)
+
+        if [[ "$groupPerm" == *w* ]]; then
+            writable=true
+        fi
+
+    # Иначе гледаме others
+    else
+
+        otherPerm=$(echo "$perm" | cut -c8-10)
+
+        if [[ "$otherPerm" == *w* ]]; then
+            writable=true
+        fi
+
+    fi
+
+    # Ако няма право за писане
+    if [[ "$writable" == false ]]; then
+        echo "user: $username (cannot write in $home)"
+    fi
+
+done < <(cut -d: -f1,3,4,6 /etc/passwd)
+###############################################################################
+#!/bin/bash
+
 if [[ $# -ne 0 ]]; then
     exit 1
 fi
