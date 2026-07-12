@@ -1,6 +1,30 @@
 #!/bin/bash
 
 if [[ $# -ne 2 ]]; then
+    exit 1
+fi
+
+file1="$1"
+file2="$2"
+
+count1=$(grep -c "$file1" "$file1")
+count2=$(grep -c "$file2" "$file2")
+
+if [[ "$count1" -gt "$count2" ]]; then
+    winner="$file1"
+else
+    winner="$file2"
+fi
+
+output="$winner.songs"
+
+cut -d' ' -f4- "$winner" | sort > "$output"
+###############################################################################
+
+
+#!/bin/bash
+
+if [[ $# -ne 2 ]]; then
   echo "it must contain 2 arguments"
   exit 1;
 fi
