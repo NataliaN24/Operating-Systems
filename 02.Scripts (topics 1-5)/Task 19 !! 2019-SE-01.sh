@@ -1,3 +1,27 @@
+#!/bin/bash
+// A ->
+maxVal=-1
+allMaxValues=$(mktemp)
+
+while read -r line; do
+    num=$(echo "$line" | grep -E '^-?[0-9]+$')
+    absolute=$(echo "$num" | tr -d '-')
+
+    if [[ -z "$num" ]]; then
+        continue
+    fi
+
+    if [[ "$absolute" -gt "$maxVal" ]]; then
+        maxVal="$absolute"
+        echo "$num" > "$allMaxValues"
+    elif [[ "$absolute" -eq "$maxVal" ]]; then
+        echo "$num" >> "$allMaxValues"
+    fi
+done
+
+sort -n "$allMaxValues" | uniq
+rm "$allMaxValues"
+/////////////////////////////////////////////////////////////////////////////////////////////////////
 #first script
 
 tmp=$(mktemp)
