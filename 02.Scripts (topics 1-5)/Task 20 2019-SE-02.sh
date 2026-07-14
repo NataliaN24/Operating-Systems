@@ -1,5 +1,50 @@
 #!/bin/bash
 
+if [[ $# -lt 1 ]]; then
+    exit 1
+fi
+
+# Стойност по подразбиране
+N=10
+
+# Проверка за -n
+if [[ "$1" == "-n" ]]; then
+    if [[ $# -lt 3 ]]; then
+        exit 1
+    fi
+
+    if [[ ! "$2" =~ ^[0-9]+$ ]]; then
+        exit 1
+    fi
+
+    N="$2"
+    shift 2
+fi
+
+res=$(mktemp)
+
+for file in "$@"; do
+    if [[ ! -f "$file" ]]; then
+        continue
+    fi
+
+    id=${file%.log}
+
+    tail -n "$N" "$file" | while read -r line; do
+        timestamp=$(echo "$line" | cut -d' ' -f1,2)
+        data=$(echo "$line" | cut -d' ' -f3-)
+
+        echo "$timestamp $id $data" >> "$res"
+    done
+done
+
+sort -k1,2 "$res"
+
+rm -f "$res"
+/////////////////////////////////////////////////////////////////////////////////
+
+#!/bin/bash
+
 if [[ $# -eq 0 ]]; then
   echo "Script needs at least 1 argument..." >&2
   exit 2
