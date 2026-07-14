@@ -1,5 +1,64 @@
 #!/bin/bash
 
+DIR1="$1"
+
+if [[ -z "$DIR1" ]]; then
+    echo "Usage: $0 DIR1"
+    exit 1
+fi
+
+logFile="$DIR1/log.txt"
+
+touch "$logFile"
+mkdir -p "$DIR1/extracted"
+
+while read -r file; do
+
+    hash=$(sha256sum "$file" | cut -d ' ' -f1)
+
+    oldHash=$(grep -F "$file" "$logFile" | cut -d ' ' -f1)
+
+    changed=0
+
+    if [[ -z "$oldHash" ]]; then
+        changed=1
+        echo "$hash  $file" >> "$logFile"
+
+    elif [[ "$oldHash" != "$hash" ]]; then
+        changed=1
+        if [[ "$oldHash" != "$hash" ]]; then
+        sed -i "s|$oldHash|$hash|" "$logFile"
+    fi
+    fi
+
+    if [[ "$changed" -eq 1 ]]; then
+
+        tmpdir=$(mktemp -d)
+
+        tar -xf "$file" -C "$tmpdir"
+
+        meow=$(find "$tmpdir" -type f -name "meow.txt" | head -n 1)
+
+        if [[ -n "$meow" ]]; then
+
+            archive=$(basename "$file")
+
+            name=$(echo "$archive" | cut -d '_' -f1)
+            timestamp=$(echo "$archive" | cut -d '-' -f2 | cut -d '.' -f1)
+
+            cp "$meow" "$DIR1/extracted/${name}_${timestamp}.txt"
+        fi
+
+        rm -rf "$tmpdir"
+    fi
+
+done < <(find "$DIR1" -type f | grep -E '/[^_]+_report-[0-9]+\.tgz$')
+
+
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+#!/bin/bash
+
 if [[ $# -ne 1 ]]; then
     exit 1
 fi
