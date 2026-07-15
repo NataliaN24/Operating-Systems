@@ -1,5 +1,71 @@
 #!/bin/bash
 
+repo="$1"
+pkg="$2"
+
+# Проверка на аргументите
+if [[ $# -ne 2 ]]; then
+    exit 1
+fi
+
+if [[ ! -d "$repo" ]]; then
+    exit 1
+fi
+
+if [[ ! -d "$pkg" ]]; then
+    exit 1
+fi
+
+# Име на пакета
+pkgName=$(basename "$pkg")
+
+# Версия
+version=$(cat "$pkg/version")
+
+# Директория tree
+treeDir="$pkg/tree"
+
+# Създаване на архив на съдържанието на tree
+tmpArchive=$(mktemp)
+
+tar -cJf "$tmpArchive" -C "$treeDir" .
+
+# Изчисляване на checksum
+hashSum=$(sha256sum "$tmpArchive" | cut -d ' ' -f1)
+
+# Път до db
+db="$repo/db"
+
+# Проверка дали съществува същата версия
+oldLine=$(grep "^$pkgName-$version " "$db")
+
+if [[ -n "$oldLine" ]]; then
+    
+    # Стар checksum
+    oldHash=$(echo "$oldLine" | cut -d ' ' -f2)
+
+    # Изтриваме стария архив
+    rm -f "$repo/packages/$oldHash.tar.xz"
+
+    # Замяна на реда в db
+    sed -i "s/^$pkgName-$version .*/$pkgName-$version $hashSum/" "$db"
+
+else
+
+    # Добавяне на нов пакет
+    echo "$pkgName-$version $hashSum" >> "$db"
+
+fi
+
+# Сортиране на db
+sort "$db" -o "$db"
+
+# Преместване на архива в packages
+mv "$tmpArchive" "$repo/packages/$hashSum.tar.xz"
+
+////////////////////////////////////////////////////////////////////////////////////
+#!/bin/bash
+
 if [[ $# -ne 2 ]]; then
     exit 1
 fi
