@@ -1,4 +1,18 @@
+find "$1" -type f | while read -r file; do
 
+    if [[ "$file" =~ /\..+\.swp$ ]]; then
+        continue
+    fi
+
+    dir=$(dirname "$file")
+    structure=${dir#"$1"/}
+
+    mkdir -p "$2/$structure"
+    cp "$file" "$2/$structure/$(basename "$file")"
+
+done
+
+///////////////////////////////////////////////////////
 #!/bin/bash
 
 if [[ $# -ne 2 ]]; then
