@@ -27,9 +27,8 @@ fi
 if [[ -z "$found1" ]]&& [[ -z "$found2" ]];then
   exit 2
 fi
-dist1=$(cat "$file1" | cut -d ' ' -f2)
-dist2=$(cat "$file2" | cut -d ' ' -f2)
-
+dist1=$(echo "$found1" | cut -d ' ' -f3)
+dist2=$(echo "$found2" | cut -d ' ' -f3)
 if (( dist1 <= dist2 )); then
   echo "$file1"
 else
