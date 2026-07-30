@@ -37,7 +37,7 @@ int main(int argc, const char* argv[])
 
     for(int i=0;i<256;i++)
     {
-        for(int j=0;;j<bytes[i];j++)
+        for(int j=0;j<bytes[i];j++)
         {
             if(write(fd,&c,sizeof(c))!=sizeof(c)) //checks if only one bytes is being written
             {
