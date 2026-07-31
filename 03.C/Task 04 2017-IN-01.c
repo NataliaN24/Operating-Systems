@@ -107,7 +107,126 @@ int main(int argc, char* argv[])
     return 0;
 }
 //////////////////////////////////////////////////////////////////////////////////////////////////////
+#include <unistd.h>
+#include <fcntl.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <err.h>
+#include <sys/stat.h>
 
+
+struct index
+{
+    uint16_t offset;
+    uint8_t length;
+    uint8_t reserved;
+};
+
+
+int main(int argc, char const *argv[])
+{
+    if(argc != 5)
+    {
+        errx(1, "wrong arguments");
+    }
+
+
+    int dat1 = open(argv[1], O_RDONLY);
+    if(dat1 < 0)
+        err(1, "dat1");
+
+
+    int idx1 = open(argv[2], O_RDONLY);
+    if(idx1 < 0)
+        err(1, "idx1");
+
+
+    int dat2 = open(argv[3],
+                    O_CREAT | O_WRONLY | O_TRUNC,
+                    0644);
+
+    if(dat2 < 0)
+        err(1, "dat2");
+
+
+    int idx2 = open(argv[4],
+                    O_CREAT | O_WRONLY | O_TRUNC,
+                    0644);
+
+    if(idx2 < 0)
+        err(1, "idx2");
+
+
+
+    struct index idx;
+
+
+    while(read(idx1, &idx, sizeof(idx)) > 0)
+    {
+
+        // проверка за цял запис
+        if(idx.length == 0)
+            continue;
+
+
+        // отиваме на низа
+        if(lseek(dat1, idx.offset, SEEK_SET) < 0)
+            err(1, "lseek");
+
+
+        uint8_t buffer[256];
+
+
+        if(read(dat1, buffer, idx.length) != idx.length)
+        {
+            errx(1, "invalid dat file");
+        }
+
+
+        // проверяваме първия символ
+
+        if(buffer[0] >= 'A' && buffer[0] <= 'Z')
+        {
+
+            // позиция в новия dat файл
+            uint16_t new_offset =
+                lseek(dat2, 0, SEEK_END);
+
+
+            // записваме низа
+            if(write(dat2, buffer, idx.length) != idx.length)
+            {
+                err(1, "write dat2");
+            }
+
+
+            struct index new_idx;
+
+            new_idx.offset = new_offset;
+            new_idx.length = idx.length;
+            new_idx.reserved = 0;
+
+
+            if(write(idx2, &new_idx, sizeof(new_idx))
+                    != sizeof(new_idx))
+            {
+                err(1, "write idx2");
+            }
+
+        }
+
+    }
+
+
+    close(dat1);
+    close(idx1);
+    close(dat2);
+    close(idx2);
+
+
+    return 0;
+}
+//////////////////////////////////////////////////////////////////////////////////////////
 
 #include <unistd.h>
 #include <fcntl.h>
