@@ -2,6 +2,108 @@
 #include <fcntl.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <err.h>
+
+
+struct patch
+{
+    uint16_t offset;
+    uint8_t old_byte;
+    uint8_t new_byte;
+};
+
+
+int main(int argc, char const *argv[])
+{
+    if(argc != 4)
+    {
+        errx(1, "wrong arguments");
+    }
+
+
+    int f1 = open(argv[1], O_RDONLY);
+    if(f1 < 0)
+        err(1, "f1");
+
+
+    int f2 = open(argv[2], O_RDONLY);
+    if(f2 < 0)
+        err(1, "f2");
+
+
+    int patch = open(argv[3],
+                     O_CREAT | O_WRONLY | O_TRUNC,
+                     0644);
+
+    if(patch < 0)
+        err(1, "patch");
+
+
+
+    uint8_t byte1;
+    uint8_t byte2;
+
+    uint16_t offset = 0;
+
+
+    while(1)
+    {
+
+        ssize_t r1 = read(f1, &byte1, sizeof(byte1));
+        ssize_t r2 = read(f2, &byte2, sizeof(byte2));
+
+
+        // ако единият файл свърши преди другия
+        if(r1 != r2)
+        {
+            errx(1, "files have different size");
+        }
+
+
+        // и двата свършиха
+        if(r1 == 0)
+        {
+            break;
+        }
+
+
+        // има разлика
+        if(byte1 != byte2)
+        {
+
+            struct patch p;
+
+            p.offset = offset;
+            p.old_byte = byte1;
+            p.new_byte = byte2;
+
+
+            if(write(patch, &p, sizeof(p))
+                    != sizeof(p))
+            {
+                err(1, "write patch");
+            }
+
+        }
+
+
+        offset++;
+
+    }
+
+
+    close(f1);
+    close(f2);
+    close(patch);
+
+
+    return 0;
+}
+//////////////////////////////////////////////////////////////////////////////////
+#include <unistd.h>
+#include <fcntl.h>
+#include <stdint.h>
+#include <stdlib.h>
 #include <sys/stat.h>
 #include <err.h>
 #include <stdio.h>
