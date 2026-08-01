@@ -1,3 +1,140 @@
+#include <unistd.h>
+#include <stdint.h>
+#include <string.h>
+#include <err.h>
+
+
+int main(int argc, const char *argv[])
+{
+    if (argc < 2)
+    {
+        errx(1, "arguments");
+    }
+
+
+    if (strcmp(argv[1], "-c") == 0)
+    {
+        if (argc != 3)
+        {
+            errx(1, "arguments");
+        }
+
+
+        int a;
+        int b;
+
+
+        if (strlen(argv[2]) == 1)
+        {
+            a = argv[2][0] - '0';
+            b = a;
+        }
+        else
+        {
+            a = argv[2][0] - '0';
+            b = argv[2][2] - '0';
+        }
+
+
+        uint8_t byte;
+        int pos = 1;
+
+
+        while (read(0, &byte, sizeof(byte)) == sizeof(byte))
+        {
+            if (byte == '\n')
+            {
+                pos = 1;
+            }
+
+
+            if (pos >= a && pos <= b)
+            {
+                if (write(1, &byte, sizeof(byte)) != sizeof(byte))
+                {
+                    err(1, "write");
+                }
+            }
+
+
+            pos++;
+        }
+    }
+
+
+    else if (strcmp(argv[1], "-d") == 0)
+    {
+        if (argc != 5)
+        {
+            errx(1, "arguments");
+        }
+
+
+        char delimiter = argv[2][0];
+
+
+        if (strcmp(argv[3], "-f") != 0)
+        {
+            errx(1, "arguments");
+        }
+
+
+        int a;
+        int b;
+
+
+        if (strlen(argv[4]) == 1)
+        {
+            a = argv[4][0] - '0';
+            b = a;
+        }
+        else
+        {
+            a = argv[4][0] - '0';
+            b = argv[4][2] - '0';
+        }
+
+
+        uint8_t byte;
+        int field = 1;
+
+
+        while (read(0, &byte, sizeof(byte)) == sizeof(byte))
+        {
+            if (byte == '\n')
+            {
+                field = 1;
+
+                if (write(1, &byte, sizeof(byte)) != sizeof(byte))
+                {
+                    err(1, "write");
+                }
+
+                continue;
+            }
+
+
+            if (byte == delimiter)
+            {
+                field++;
+                continue;
+            }
+
+
+            if (field >= a && field <= b)
+            {
+                if (write(1, &byte, sizeof(byte)) != sizeof(byte))
+                {
+                    err(1, "write");
+                }
+            }
+        }
+    }
+
+
+    return 0;
+}
+///////////////////////////////////////////////
 #include <stdlib.h>
 #include <unistd.h>
 #include <err.h>
