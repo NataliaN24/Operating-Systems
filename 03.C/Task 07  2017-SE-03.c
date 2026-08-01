@@ -1,3 +1,100 @@
+#include <fcntl.h>
+#include <unistd.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <err.h>
+
+int main(int argc, char* argv[])
+{
+    if (argc != 4)
+    {
+        errx(1, "Error");
+    }
+
+    int patch = open(argv[1], O_RDONLY);
+    if (patch < 0)
+        err(1, "patch");
+
+    int f1 = open(argv[2], O_RDONLY);
+    if (f1 < 0)
+        err(1, "f1");
+
+    int f2 = open(argv[3], O_CREAT | O_TRUNC | O_RDWR, 0644);
+    if (f2 < 0)
+        err(1, "f2");
+
+
+    uint8_t byte;
+    uint16_t offset;
+    uint8_t original;
+    uint8_t newByte;
+    ssize_t n;
+
+
+    // copy f1 -> f2
+    while((n = read(f1, &byte, sizeof(byte))) == sizeof(byte))
+    {
+        if(write(f2, &byte, sizeof(byte)) != sizeof(byte))
+        {
+            err(1, "write");
+        }
+    }
+
+    if(n < 0)
+    {
+        err(1, "read");
+    }
+
+
+    // apply patch
+    while(read(patch, &offset, sizeof(offset)) == sizeof(offset))
+    {
+        if(read(patch, &original, sizeof(original)) != sizeof(original) ||
+           read(patch, &newByte, sizeof(newByte)) != sizeof(newByte))
+        {
+            errx(1, "invalid patch");
+        }
+
+
+        if(lseek(f2, offset, SEEK_SET) < 0)
+        {
+            err(1, "lseek");
+        }
+
+
+        if(read(f2, &byte, sizeof(byte)) != sizeof(byte))
+        {
+            err(1, "offset outside file");
+        }
+
+
+        if(byte != original)
+        {
+            errx(1, "wrong original byte");
+        }
+
+
+        if(lseek(f2, offset, SEEK_SET) < 0)
+        {
+            err(1, "lseek");
+        }
+
+
+        if(write(f2, &newByte, sizeof(newByte)) != sizeof(newByte))
+        {
+            err(1, "write");
+        }
+    }
+
+
+    close(patch);
+    close(f1);
+    close(f2);
+
+    return 0;
+}
+
+//////////////////////////////////////////////////////////////////////////////////////////
 #include <unistd.h>
 #include <fcntl.h>
 #include <stdint.h>
