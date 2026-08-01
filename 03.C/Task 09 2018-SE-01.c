@@ -1,4 +1,133 @@
 #include <unistd.h>
+#include <stdint.h>
+#include <string.h>
+#include <err.h>
+
+int main(int argc, char* argv[])
+{
+    int mode = 0; // 0 - replace, 1 - delete, 2 - squeeze
+    char* set1;
+    char* set2 = 0;
+
+    if (argc < 2)
+    {
+        errx(1, "not enough arguments");
+    }
+
+
+    if (strcmp(argv[1], "-d") == 0)
+    {
+        mode = 1;
+        if (argc != 3)
+        {
+            errx(1, "wrong arguments");
+        }
+
+        set1 = argv[2];
+    }
+    else if (strcmp(argv[1], "-s") == 0)
+    {
+        mode = 2;
+        if (argc != 3)
+        {
+            errx(1, "wrong arguments");
+        }
+
+        set1 = argv[2];
+    }
+    else
+    {
+        mode = 0;
+
+        if (argc != 3)
+        {
+            errx(1, "wrong arguments");
+        }
+
+        set1 = argv[1];
+        set2 = argv[2];
+
+        if (strlen(set1) != strlen(set2))
+        {
+            errx(1, "sets have different length");
+        }
+    }
+
+
+    uint8_t c;
+    uint8_t prev = 0;
+    int has_prev = 0;
+
+
+    while (read(0, &c, sizeof(c)) == sizeof(c))
+    {
+        int found = -1;
+
+
+        // търсим символа в SET1
+        for (int i = 0; set1[i] != '\0'; i++)
+        {
+            if (c == set1[i])
+            {
+                found = i;
+                break;
+            }
+        }
+
+
+        // -d : изтриване
+        if (mode == 1)
+        {
+            if (found != -1)
+            {
+                continue;
+            }
+
+            if (write(1, &c, sizeof(c)) != sizeof(c))
+            {
+                err(1, "write");
+            }
+        }
+
+
+        // -s : squeeze
+        else if (mode == 2)
+        {
+            if (found != -1 && has_prev && prev == c)
+            {
+                continue;
+            }
+
+            if (write(1, &c, sizeof(c)) != sizeof(c))
+            {
+                err(1, "write");
+            }
+
+            prev = c;
+            has_prev = 1;
+        }
+
+
+        // replace
+        else
+        {
+            if (found != -1)
+            {
+                c = set2[found];
+            }
+
+            if (write(1, &c, sizeof(c)) != sizeof(c))
+            {
+                err(1, "write");
+            }
+        }
+    }
+
+
+    return 0;
+}
+/////////////////////////////////////////////////////////////////////////////
+#include <unistd.h>
 #include <err.h>
 #include <string.h>
 #include <stdbool.h>
