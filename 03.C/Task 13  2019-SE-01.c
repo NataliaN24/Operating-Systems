@@ -1,3 +1,111 @@
+#include <fcntl.h>
+#include <unistd.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <err.h>
+
+typedef struct {
+    uint32_t uid;
+    uint16_t reserved1;
+    uint16_t reserved2;
+    uint32_t start;
+    uint32_t end;
+} record;
+
+int main(int argc, char *argv[])
+{
+    if (argc != 2)
+        errx(1, "wrong arguments");
+
+    int fd = open(argv[1], O_RDONLY);
+    if (fd == -1)
+        err(1, "open");
+
+    record records[16384];
+    int n = 0;
+
+    uint64_t sum = 0;
+
+    // Четене на файла
+    while (read(fd, &records[n], sizeof(record)) == sizeof(record)) {
+        if (records[n].end < records[n].start)
+            errx(2, "invalid time");
+
+        sum += records[n].end - records[n].start;
+        n++;
+    }
+
+    close(fd);
+
+    if (n == 0)
+        return 0;
+
+    // Средна стойност
+    double x = (double)sum / n;
+
+    // Дисперсия
+    double D = 0;
+
+    for (int i = 0; i < n; i++) {
+        double t = records[i].end - records[i].start;
+        D += (t - x) * (t - x);
+    }
+
+    D /= n;
+
+
+    // Масив за различните UID-та
+    uint32_t ids[2048];
+    uint32_t maxSession[2048];
+    int count = 0;
+
+
+    // Намиране на най-дългата сесия за всеки UID
+    for (int i = 0; i < n; i++) {
+
+        uint32_t duration = records[i].end - records[i].start;
+
+        int found = -1;
+
+        for (int j = 0; j < count; j++) {
+            if (ids[j] == records[i].uid) {
+                found = j;
+                break;
+            }
+        }
+
+        if (found == -1) {
+            ids[count] = records[i].uid;
+            maxSession[count] = duration;
+            count++;
+        }
+        else {
+            if (duration > maxSession[found])
+                maxSession[found] = duration;
+        }
+    }
+
+
+    // Извеждане
+    for (int i = 0; i < count; i++) {
+
+        double square = (double)maxSession[i] * maxSession[i];
+
+        if (square > D) {
+            char buf[64];
+            int len = 0;
+
+            // прост print без printf
+            len += sprintf(buf + len, "%u %u\n",
+                           ids[i], maxSession[i]);
+
+            write(1, buf, len);
+        }
+    }
+
+    return 0;
+}
+/////////////////////////////////////////////////////////////
 #include <stdlib.h>
 #include <unistd.h>
 #include <fcntl.h>
