@@ -10,57 +10,75 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <unistd.h>
-#include <fcntl.h>
-#include <stdlib.h>
-#include <err.h>
-#include <string.h>
 
 int main(int argc, char* argv[])
 {
-    char buff[4096];
-    ssize_t bytesR;
+    uint8_t byte;
+    ssize_t n;
 
-    if (argc == 1) {
-        while ((bytesR = read(0, buff, sizeof(buff))) > 0) {
-            if (write(1, buff, bytesR) != bytesR) {
+    if(argc == 1)
+    {
+        while((n = read(0, &byte, sizeof(byte))) > 0)
+        {
+            if(write(1, &byte, sizeof(byte)) != sizeof(byte))
+            {
                 err(1, "write");
             }
         }
 
-        if (bytesR == -1) {
+        if(n < 0)
+        {
             err(1, "read");
         }
-    } else {
-        for (int i = 1; i < argc; i++) {
-            int fd;
+    }
+    else
+    {
+        for(int i = 1; i < argc; i++)
+        {
+            if(strcmp(argv[i], "-") == 0)
+            {
+                while((n = read(0, &byte, sizeof(byte))) > 0)
+                {
+                    if(write(1, &byte, sizeof(byte)) != sizeof(byte))
+                    {
+                        err(1, "write");
+                    }
+                }
 
-            if (argv[i][0] == '-') {
-                fd = 0;
-            } else {
-                fd = open(argv[i], O_RDONLY);
-                if (fd == -1) {
+                if(n < 0)
+                {
+                    err(1, "read");
+                }
+            }
+            else
+            {
+                int fd = open(argv[i], O_RDONLY);
+
+                if(fd < 0)
+                {
                     err(1, "open");
                 }
-            }
 
-            while ((bytesR = read(fd, buff, sizeof(buff))) > 0) {
-                if (write(1, buff, bytesR) != bytesR) {
-                    err(1, "write");
+
+                while((n = read(fd, &byte, sizeof(byte))) == sizeof(byte))
+                {
+                    if(write(1, &byte, sizeof(byte)) != sizeof(byte))
+                    {
+                        err(1, "write");
+                    }
                 }
-            }
 
-            if (bytesR == -1) {
-                err(1, "read");
-            }
+                if(n < 0)
+                {
+                    err(1, "read");
+                }
 
-            if (fd != 0) {
                 close(fd);
             }
         }
     }
 
-    exit(0);
+    return 0;
 }
 ////////////////////////////////////////////////////////////////////////////////////
 //$ ./main f - g
