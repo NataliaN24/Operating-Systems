@@ -1,6 +1,74 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <stdint.h>
+#include <err.h>
+
+int main(int argc, char *argv[])
+{
+    if (argc != 3) {
+        errx(1, "args");
+    }
+
+    int stream = open(argv[1], O_RDONLY);
+    if (stream < 0) {
+        err(1, "open input");
+    }
+
+    int msg = open(argv[2], O_CREAT | O_TRUNC | O_WRONLY, 0644);
+    if (msg < 0) {
+        err(1, "open output");
+    }
+
+    uint8_t start;
+    uint8_t N;
+
+    while (read(stream, &start, 1) == 1)
+    {
+        if (start != 0x55) {
+            continue;
+        }
+
+        if (read(stream, &N, 1) != 1) {
+            break;
+        }
+
+        if (N < 3) {
+            continue;
+        }
+
+        uint8_t message[N];
+
+        message[0] = start;
+        message[1] = N;
+
+        for (int i = 2; i < N; i++) {
+            if (read(stream, &message[i], 1) != 1) {
+                errx(1, "bad file");
+            }
+        }
+
+        uint8_t checksum = 0;
+
+        for (int i = 0; i < N-1; i++) {
+            checksum ^= message[i];
+        }
+
+        if (checksum == message[N-1]) {
+            if (write(msg, message, N) != N) {
+                err(1, "write");
+            }
+        }
+    }
+
+    close(stream);
+    close(msg);
+
+    return 0;
+}
+///////////////////////////////////////////////
+#include <unistd.h>
+#include <fcntl.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <err.h>
 
