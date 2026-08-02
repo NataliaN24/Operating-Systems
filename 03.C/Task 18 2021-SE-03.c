@@ -1,3 +1,64 @@
+#include <unistd.h>
+#include <fcntl.h>
+#include <stdint.h>
+#include <err.h>
+#include <stdio.h>
+
+int main(int argc, char* argv[])
+{
+    if (argc != 3) {
+        errx(1, "usage");
+    }
+
+    int input = open(argv[1], O_RDONLY);
+    if (input < 0) {
+        err(1, "open input");
+    }
+
+    int out = open(argv[2], O_CREAT | O_TRUNC | O_WRONLY, 0644);
+    if (out < 0) {
+        err(1, "open output");
+    }
+
+    char header[] = "#include <stdint.h>\n\n";
+    if (write(out, header, sizeof(header) - 1) != (sizeof(header) - 1)) {
+        err(1, "write");
+    }
+
+    uint16_t arr[524288];
+    uint16_t num;
+    ssize_t n;
+    uint32_t size = 0;
+
+    while ((n = read(input, &num, sizeof(num))) == sizeof(num)) {
+        if (size == 524288) {
+            errx(1, "too many elements");
+        }
+        arr[size++] = num;
+    }
+
+    if (n != 0) {
+        err(1, "read");
+    }
+
+    dprintf(out, "const uint16_t arr[] = {");
+
+    for (uint32_t i = 0; i < size; i++) {
+        if (i != 0) {
+            dprintf(out, ", ");
+        }
+        dprintf(out, "%u", arr[i]);
+    }
+
+    dprintf(out, "};\n");
+    dprintf(out, "const uint32_t arrN = %u;\n", size);
+
+    close(input);
+    close(out);
+
+    return 0;
+}
+////////////////////////////////////////////////
 #include <stdint.h>
 #include <unistd.h>
 #include <fcntl.h>
