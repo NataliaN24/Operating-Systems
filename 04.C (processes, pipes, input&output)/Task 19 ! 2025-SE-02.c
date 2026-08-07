@@ -1,6 +1,90 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <stdint.h>
+#include <sys/wait.h>
+#include <err.h>
+
+int main(int argc, const char *argv[])
+{
+    if (argc < 3 || argc > 18)
+    {
+        errx(1, "Usage");
+    }
+
+    int cnt = argc - 2;
+
+    int pipefd[2];
+    if (pipe(pipefd) < 0)
+    {
+        err(1, "pipe");
+    }
+
+    pid_t pid = fork();
+    if (pid < 0)
+    {
+        err(1, "fork");
+    }
+
+    if (pid == 0)
+    {
+        close(pipefd[0]);
+
+        if (dup2(pipefd[1], STDOUT_FILENO) < 0)
+        {
+            err(1, "dup2");
+        }
+
+        close(pipefd[1]);
+
+        execlp(argv[1], argv[1], (char *)NULL);
+        err(1, "execlp");
+    }
+
+    close(pipefd[1]);
+
+    int files[16];
+
+    for (int i = 0; i < cnt; i++)
+    {
+        files[i] = open(argv[i + 2], O_WRONLY | O_APPEND);
+        if (files[i] < 0)
+        {
+            err(1, "open");
+        }
+    }
+
+    uint8_t package[64];
+    int i = 0;
+
+    while (read(pipefd[0], package, sizeof(package)) == sizeof(package))
+    {
+        if (write(files[i % cnt], package, sizeof(package)) != sizeof(package))
+        {
+            err(1, "write");
+        }
+
+        i++;
+    }
+
+    close(pipefd[0]);
+
+    for (int j = 0; j < cnt; j++)
+    {
+        close(files[j]);
+    }
+
+    if (wait(NULL) < 0)
+    {
+        err(1, "wait");
+    }
+
+    return 0;
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+#include <unistd.h>
+#include <fcntl.h>
+#include <stdint.h>
 #include <err.h>
 #include <sys/wait.h>
 #include <stdlib.h>
