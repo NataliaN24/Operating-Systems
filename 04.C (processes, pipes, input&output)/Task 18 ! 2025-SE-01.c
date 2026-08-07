@@ -117,7 +117,14 @@ int main(void)
             }
         }
     }
-
+    for(int i=0;i<WHEELS;i++)
+        {
+            close(wheelInput[i][1]);
+            close(wheelOutput[i][0]);
+        }
+    while(wait(NULL)>0)
+        ;
+            
     return 0;
 }
 //////////////////////////////////////////////////////////////////////////////
