@@ -100,38 +100,34 @@ int main(int argc, char* argv[])
         // Намерихме думата
         if (cmp == 0)
         {
-            uint8_t buff[4096];
+            char buff[4096];
+int len = 0;
+char c;
 
-            // Четем дефиницията до \0
-            while (1)
-            {
-                int r = read(dic, buff, sizeof(buff));
+while (1)
+{
+            int r = read(dic, &c, 1);
+        
+            if (r < 0) {
+                err(14, "read definition");
+            }
+        
+            if (r == 0) {
+                break;
+            }
+        
+            if (c == '\0') {
+                break;
+            }
+        
+            buff[len] = c;
+            len++;
+        }
+        
+        if (write(1, buff, len) != len) {
+            err(15, "write stdout");
+        }
 
-                if (r < 0) {
-                    err(14, "read definition");
-                }
-
-                if (r == 0) {
-                    break;
-                }
-
-                int i;
-
-                for (i = 0; i < r; i++)
-                {
-                    if (buff[i] == 0) {
-                        break;
-                    }
-                }
-
-                if (write(1, buff, i) != i) {
-                    err(15, "write stdout");
-                }
-
-                // Намерили сме края на дефиницията
-                if (i < r) {
-                    break;
-                }
             }
 
             close(dic);
