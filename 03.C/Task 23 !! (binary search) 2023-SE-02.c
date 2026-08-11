@@ -1,3 +1,169 @@
+```cpp
+#include <unistd.h>
+#include <fcntl.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
+#include <err.h>
+
+int main(int argc, char* argv[])
+{
+    if (argc != 4) {
+        errx(1, "usage: ./main word english.dic english.idx");
+    }
+
+    if (strlen(argv[1]) > 63) {
+        errx(2, "word too long");
+    }
+
+    int dic = open(argv[2], O_RDONLY);
+    if (dic < 0) {
+        err(3, "open dictionary");
+    }
+
+    int idx = open(argv[3], O_RDONLY);
+    if (idx < 0) {
+        err(4, "open index");
+    }
+
+    off_t idxSize = lseek(idx, 0, SEEK_END);
+    if (idxSize < 0) {
+        err(5, "lseek");
+    }
+
+    if (idxSize % sizeof(uint32_t) != 0) {
+        errx(6, "invalid index file");
+    }
+
+    uint32_t count = idxSize / sizeof(uint32_t);
+
+    // Binary search с [left, right]
+    uint32_t left = 0;
+    uint32_t right = count - 1;
+
+    while (left <= right)
+    {
+        uint32_t mid = left + (right - left) / 2;
+
+        uint32_t pos;
+
+        if (lseek(idx, mid * sizeof(uint32_t), SEEK_SET) < 0) {
+            err(7, "lseek idx");
+        }
+
+        if (read(idx, &pos, sizeof(pos)) != sizeof(pos)) {
+            err(8, "read idx");
+        }
+
+        // pos сочи към \0, затова започваме от pos + 1
+        if (lseek(dic, pos + 1, SEEK_SET) < 0) {
+            err(9, "lseek dic");
+        }
+
+        char word[64];
+        uint8_t c;
+        uint8_t len = 0;
+
+        // Прочитаме думата до \n
+        while (1)
+        {
+            int r = read(dic, &c, sizeof(c));
+
+            if (r < 0) {
+                err(10, "read word");
+            }
+
+            if (r == 0) {
+                errx(11, "invalid dictionary");
+            }
+
+            if (c == '\n') {
+                break;
+            }
+
+            if (c == 0) {
+                errx(12, "invalid word");
+            }
+
+            if (len == 63) {
+                errx(13, "word too long in dictionary");
+            }
+
+            word[len] = c;
+            len++;
+        }
+
+        word[len] = '\0';
+
+        int cmp = strcmp(argv[1], word);
+
+        // Намерихме думата
+        if (cmp == 0)
+        {
+            uint8_t buff[4096];
+
+            // Четем дефиницията до \0
+            while (1)
+            {
+                int r = read(dic, buff, sizeof(buff));
+
+                if (r < 0) {
+                    err(14, "read definition");
+                }
+
+                if (r == 0) {
+                    break;
+                }
+
+                int i;
+
+                for (i = 0; i < r; i++)
+                {
+                    if (buff[i] == 0) {
+                        break;
+                    }
+                }
+
+                if (write(1, buff, i) != i) {
+                    err(15, "write stdout");
+                }
+
+                // Намерили сме края на дефиницията
+                if (i < r) {
+                    break;
+                }
+            }
+
+            close(dic);
+            close(idx);
+            exit(0);
+        }
+
+        // Търсената дума е по-малка
+        if (cmp < 0) {
+            right = mid - 1;
+        }
+        // Търсената дума е по-голяма
+        else {
+            left = mid + 1;
+        }
+    }
+
+    // Думата не е намерена
+    const char msg[] = "word not found\n";
+
+    if (write(1, msg, sizeof(msg) - 1) != sizeof(msg) - 1) {
+        err(16, "write");
+    }
+
+    close(dic);
+    close(idx);
+
+    exit(0);
+}
+```
+
+////////////////////////////////////////////////////////
 #include <unistd.h>
 #include <fcntl.h>
 #include <stdint.h>
