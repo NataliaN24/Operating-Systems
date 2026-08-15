@@ -1,6 +1,192 @@
 #!/bin/bash
 
 if [[ $# -ne 2 ]]; then
+    exit 1
+fi
+
+dir="$1"
+number="$2"
+
+if [[ ! -d "$dir" ]]; then
+    exit 2
+fi
+
+if [[ ! "$number" =~ ^[0-9]+$ ]]; then
+    exit 2
+fi
+
+if (( number < 1 || number > 99 )); then
+    exit 3
+fi
+
+howMuchUsed=$(df "$dir" | tr -s ' ' | sed 's/^ //; s/ $//' |
+    tail -n 1 | cut -d ' ' -f5 | sed 's/%//')
+
+if (( howMuchUsed <= number )); then
+    exit 0
+fi
+
+daily="$dir/3"
+weekly="$dir/2"
+monthly="$dir/1"
+yearly="$dir/0"
+
+if [[ ! -d "$daily" || ! -d "$weekly" ||
+      ! -d "$monthly" || ! -d "$yearly" ]]; then
+    exit 2
+fi
+
+allObjects=$(mktemp)
+objects=$(mktemp)
+delete=$(mktemp)
+
+find "$dir" \( -type f -o -type l \) -name '*-*.tar.xz' |
+    sort -u > "$allObjects"
+
+# Get all objects
+while read -r obj; do
+
+    if [[ -L "$obj" ]]; then
+        continue
+    fi
+
+    file=$(basename "$obj")
+    name=${file%.tar.xz}
+    object=$(echo "$name" | cut -d '-' -f1,2)
+
+    echo "$object"
+
+done < "$allObjects" | sort -u > "$objects"
+
+
+# Process every object
+while read -r object; do
+
+    howManyDaily=$(mktemp)
+    howManyWeekly=$(mktemp)
+    howManyMonthly=$(mktemp)
+    howManyYearly=$(mktemp)
+
+    find "$daily" -type f -name "$object-*.tar.xz" |
+        sort -r > "$howManyDaily"
+
+    find "$weekly" -type f -name "$object-*.tar.xz" |
+        sort -r > "$howManyWeekly"
+
+    find "$monthly" -type f -name "$object-*.tar.xz" |
+        sort -r > "$howManyMonthly"
+
+    find "$yearly" -type f -name "$object-*.tar.xz" |
+        sort -r > "$howManyYearly"
+
+    dailyCnt=$(wc -l < "$howManyDaily")
+    weeklyCnt=$(wc -l < "$howManyWeekly")
+    monthlyCnt=$(wc -l < "$howManyMonthly")
+    yearlyCnt=$(wc -l < "$howManyYearly")
+
+    # Object is not valid -> do not delete any full backup
+    if (( dailyCnt < 4 || weeklyCnt < 3 ||
+          monthlyCnt < 2 || yearlyCnt < 1 )); then
+
+        rm -f "$howManyDaily" "$howManyWeekly"
+        rm -f "$howManyMonthly" "$howManyYearly"
+
+        continue
+    fi
+
+    # Keep newest 4 daily backups
+    tail -n +5 "$howManyDaily" >> "$delete"
+
+    # Keep newest 3 weekly backups
+    tail -n +4 "$howManyWeekly" >> "$delete"
+
+    # Keep newest 2 monthly backups
+    tail -n +3 "$howManyMonthly" >> "$delete"
+
+    # Keep newest 1 yearly backup
+    tail -n +2 "$howManyYearly" >> "$delete"
+
+    rm -f "$howManyDaily" "$howManyWeekly"
+    rm -f "$howManyMonthly" "$howManyYearly"
+
+done < "$objects"
+
+
+# Delete in order of importance:
+#
+# yearly (0) -> monthly (1) -> weekly (2) -> daily (3)
+# and oldest first inside each class.
+#
+# We determine the class from the directory name.
+
+for class in 0 1 2 3; do
+
+    if (( class == 0 )); then
+        find "$yearly" -type f -name '*-*.tar.xz' |
+            sort >> /tmp/delete_all
+    fi
+
+    if (( class == 1 )); then
+        find "$monthly" -type f -name '*-*.tar.xz' |
+            sort >> /tmp/delete_all
+    fi
+
+    if (( class == 2 )); then
+        find "$weekly" -type f -name '*-*.tar.xz' |
+            sort >> /tmp/delete_all
+    fi
+
+    if (( class == 3 )); then
+        find "$daily" -type f -name '*-*.tar.xz' |
+            sort >> /tmp/delete_all
+    fi
+
+done
+
+# Instead of /tmp/delete_all, create the ordered list directly
+# from the files that are actually allowed to be deleted.
+rm -f /tmp/delete_all
+
+find "$yearly" -type f -name '*-*.tar.xz' |
+    sort >> "$delete"
+
+find "$monthly" -type f -name '*-*.tar.xz' |
+    sort >> "$delete"
+
+find "$weekly" -type f -name '*-*.tar.xz' |
+    sort >> "$delete"
+
+find "$daily" -type f -name '*-*.tar.xz' |
+    sort >> "$delete"
+
+
+while read -r file; do
+
+    howMuchUsedActual=$(df "$dir" | tr -s ' ' | sed 's/^ //; s/ $//' |
+        tail -n 1 | cut -d ' ' -f5 | sed 's/%//')
+
+    if (( howMuchUsedActual <= number )); then
+        break
+    fi
+
+    if [[ -f "$file" && ! -L "$file" ]]; then
+        rm -f "$file"
+    fi
+
+done < "$delete"
+
+
+# Remove broken symlinks
+find "$dir" -type l ! -e -delete
+
+rm -f "$allObjects" "$objects" "$delete"
+
+
+
+///////////////////////////////////////////////
+#!/bin/bash
+
+if [[ $# -ne 2 ]]; then
     echo "Usage: $0 <fubar_dir> <percent>" >&2
     exit 1
 fi
