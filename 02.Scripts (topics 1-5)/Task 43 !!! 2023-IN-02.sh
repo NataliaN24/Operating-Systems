@@ -1,4 +1,120 @@
 #!/bin/bash
+
+dir="$1"
+
+if [[ $# -ne 1 ]]; then
+    exit 1
+fi
+
+if [[ ! -d "$dir" ]]; then
+    exit 2
+fi
+
+allFiles=$(mktemp)
+filesHash=$(mktemp)
+hashes=$(mktemp)
+hardlinks=$(mktemp)
+onlyFiles=$(mktemp)
+
+find "$dir" -type f > "$allFiles"
+
+while read -r file; do
+
+    inode=$(stat -c '%i' "$file")
+    hash=$(sha256sum "$file" | cut -d ' ' -f1)
+
+    echo "$file $hash $inode" >> "$filesHash"
+
+done < "$allFiles"
+
+
+# Get every different hash
+cut -d ' ' -f2 "$filesHash" | sort -u > "$hashes"
+
+
+# Process every measurement
+while read -r hash; do
+
+    # All files with this content
+    grep " $hash " "$filesHash" > "$hardlinks"
+
+    # Number of files with this content
+    fileCnt=$(wc -l < "$hardlinks")
+
+    # Find the different inodes.
+    # Each different inode represents one separate file/hardlink group.
+    cut -d ' ' -f3 "$hardlinks" | sort -u > "$onlyFiles"
+
+    inodeCnt=$(wc -l < "$onlyFiles")
+
+
+    # -------------------------------------------------
+    # CASE 1:
+    # Only separate ordinary files
+    # -------------------------------------------------
+
+    if (( fileCnt == inodeCnt )); then
+
+        # Keep the first one, output the rest
+        tail -n +2 "$hardlinks" |
+        while read -r file hash inode; do
+            echo "$file"
+        done
+
+
+    else
+
+        # -------------------------------------------------
+        # There is at least one hardlink group
+        # -------------------------------------------------
+
+        # Find every inode separately
+        inodes=$(mktemp)
+
+        cut -d ' ' -f3 "$hardlinks" | sort -u > "$inodes"
+
+        hasSeparateFiles=0
+
+        while read -r inode; do
+
+            group=$(mktemp)
+
+            grep " $hash $inode$" "$hardlinks" > "$group"
+
+            groupCnt=$(wc -l < "$group")
+
+            # One name with this inode = ordinary file
+            if (( groupCnt == 1 )); then
+                hasSeparateFiles=1
+
+                # If there are hardlink groups AND ordinary files,
+                # all ordinary files must be removed.
+                echo "$(cut -d ' ' -f1 "$group")"
+
+            else
+                # Hardlink group:
+                # remove only one name
+                head -n 1 "$group" |
+                while read -r file hash inode; do
+                    echo "$file"
+                done
+            fi
+
+            rm -f "$group"
+
+        done < "$inodes"
+
+        rm -f "$inodes"
+
+    fi
+
+done < "$hashes"
+
+
+rm -f "$allFiles" "$filesHash" "$hashes" "$hardlinks" "$onlyFiles"
+
+////////////////////////////////////////////////////////////
+#!/bin/bash
 #!/bin/bash
 
 if [[ $# -ne 1 ]]; then
