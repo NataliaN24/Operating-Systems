@@ -4,6 +4,91 @@ if [[ $# -ne 1 ]]; then
     exit 1
 fi
 
+dir="$1"
+
+if [[ ! -d "$dir" ]]; then
+    exit 2
+fi
+
+allFiles=$(mktemp)
+filesHash=$(mktemp)
+hashes=$(mktemp)
+
+find "$dir" -type f > "$allFiles"
+
+while read -r file; do
+
+    hash=$(sha256sum "$file" | cut -d ' ' -f1)
+    inode=$(stat -c '%i' "$file")
+    size=$(stat -c '%s' "$file")
+
+    echo "$file $hash $inode $size" >> "$filesHash"
+
+done < "$allFiles"
+
+
+# Get every different hash
+cut -d ' ' -f2 "$filesHash" | sort -u > "$hashes"
+
+groups=0
+freed=0
+
+
+while read -r hash; do
+
+    sameFiles=$(mktemp)
+
+    grep " $hash " "$filesHash" > "$sameFiles"
+
+    count=$(wc -l < "$sameFiles")
+
+    # Only groups containing at least two files
+    if (( count > 1 )); then
+
+        # Check whether all files already point
+        # to the same inode.
+        inodeCount=$(cut -d ' ' -f3 "$sameFiles" | sort -u | wc -l)
+
+        if (( inodeCount > 1 )); then
+
+            groups=$((groups + 1))
+
+            # Keep the first file
+            first=$(head -n 1 "$sameFiles" | cut -d ' ' -f1)
+
+            # Size of one copy
+            size=$(head -n 1 "$sameFiles" | cut -d ' ' -f4)
+
+            # Every other separate copy can be removed
+            freed=$((freed + (count - 1) * size))
+
+            tail -n +2 "$sameFiles" |
+            while read -r file hash inode size; do
+
+                rm "$file"
+                ln "$first" "$file"
+
+            done
+        fi
+    fi
+
+    rm -f "$sameFiles"
+
+done < "$hashes"
+
+
+echo "Deduplicated groups: $groups"
+echo "Freed space: $freed bytes"
+
+rm -f "$allFiles" "$filesHash" "$hashes"
+
+/////////////////////////////////////////////////////
+#!/bin/bash
+
+if [[ $# -ne 1 ]]; then
+    exit 1
+fi
+
 if [[ ! -d "$1" ]]; then
     exit 2
 fi
