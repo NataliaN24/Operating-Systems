@@ -1,6 +1,94 @@
 #!/bin/bash
 
 if [[ $# -ne 2 ]]; then
+    exit 1
+fi
+
+if [[ ! -d "$1" ]]; then
+    exit 1
+fi
+
+src="$1"
+dest="$2"
+
+mkdir -p "$dest"
+
+allPhotos=$(mktemp)
+filesToBeMoved=$(mktemp)
+
+find "$src" -type f -name '*.jpg' -printf "%TY-%Tm-%Td %P\n" |
+    sort > "$allPhotos"
+
+start=""
+current=""
+
+while read date photo; do
+
+    # First photo
+    if [[ -z "$start" ]]; then
+        start="$date"
+        current="$date"
+        echo "$photo" >> "$filesToBeMoved"
+        continue
+    fi
+
+    # Same day
+    if [[ "$date" == "$current" ]]; then
+        echo "$photo" >> "$filesToBeMoved"
+        continue
+    fi
+
+    # Calculate the next day
+    next=$(date -d "$current + 1 day" +'%Y-%m-%d')
+
+    if [[ "$date" == "$next" ]]; then
+
+        # Consecutive day
+        current="$date"
+        echo "$photo" >> "$filesToBeMoved"
+
+    else
+
+        # Finish current interval
+        interval="${start}_${current}"
+        mkdir -p "$dest/$interval"
+
+        while read -r p; do
+            mv "$src/$p" "$dest/$interval"
+        done < "$filesToBeMoved"
+
+        > "$filesToBeMoved"
+
+        # Start new interval
+        start="$date"
+        current="$date"
+        echo "$photo" >> "$filesToBeMoved"
+
+    fi
+
+done < "$allPhotos"
+
+# Finish last interval
+if [[ -n "$start" ]]; then
+
+    interval="${start}_${current}"
+    mkdir -p "$dest/$interval"
+
+    while read -r p; do
+        mv "$src/$p" "$dest/$interval"
+    done < "$filesToBeMoved"
+
+fi
+
+rm "$allPhotos"
+rm "$filesToBeMoved"
+
+
+
+//////////////////////////////////////////////////
+#!/bin/bash
+
+if [[ $# -ne 2 ]]; then
     echo "Usage: $0 CAMERA_DIR LIBRARY_DIR"
     exit 1
 fi
