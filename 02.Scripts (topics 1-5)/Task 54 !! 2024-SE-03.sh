@@ -1,5 +1,76 @@
 #!/bin/bash
 
+if [[ $# -ne 1 || ! "$1" =~ ^[0-9]+$ ]]; then
+    exit 1
+fi
+
+N="$1"
+
+notes=$(mktemp)
+words=$(mktemp)
+
+echo "A 0
+Bb 1
+B 2
+C 3
+Db 4
+D 5
+Eb 6
+E 7
+F 8
+Gb 9
+G 10
+Ab 11" > "$notes"
+
+while read -r line; do
+
+    # If there are no chords, print the line unchanged
+    if ! grep -qE '\[[^]]+\]' <<< "$line"; then
+        echo "$line"
+        continue
+    fi
+
+    # Get all chords without brackets
+    grep -Eo '\[[^]]+\]' <<< "$line" | sed 's/\[//g; s/\]//g' > "$words"
+
+    while read -r word; do
+
+        firstLetter=$(echo "$word" | cut -c1)
+        secondLetter=$(echo "$word" | cut -c2)
+
+        if [[ "$secondLetter" == "b" ]]; then
+            tone="$firstLetter$secondLetter"
+        else
+            tone="$firstLetter"
+        fi
+
+        # Check whether the tone exists
+        if ! grep -qE "^$tone " "$notes"; then
+            echo "Unknown note: $tone" >&2
+            exit 1
+        fi
+
+        level=$(grep -E "^$tone " "$notes" | cut -d ' ' -f2)
+
+        levelToChange=$(( (level + N) % 12 ))
+
+        replacement=$(grep -E " $levelToChange$" "$notes" | cut -d ' ' -f1)
+
+        newWord=$(echo "$word" | sed "s/^$tone/$replacement/")
+
+        line=$(echo "$line" | sed "s/\[$word\]/\[$newWord\]/g")
+
+    done < "$words"
+
+    echo "$line"
+
+done
+
+rm "$notes" "$words"
+
+///////////////////////////////////////////////////////////////
+#!/bin/bash
+
 if [[ $# -ne 1 ]]; then
     echo "Usage: $0 N" >&2
     exit 1
