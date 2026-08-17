@@ -1,6 +1,62 @@
 #!/bin/bash
 
 if [[ $# -ne 2 ]]; then
+    exit 2
+fi
+
+file="$1"
+k="$2"
+
+if [[ ! -f "$file" ]]; then
+    exit 2
+fi
+
+if [[ ! "$k" =~ ^[0-9]+$ ]]; then
+    exit 2
+fi
+
+echo -e "A 1\nB 2\nC 3\nD 4\nE 5\nF 6\nG 7\nH 8\nI 9\nJ 10\nK 11\nL 12\nM 13\nN 14\nO 15\nP 16\nQ 17\nR 18\nS 19\nT 20\nU 21\nV 22\nW 23\nX 24\nY 25\nZ 26" > alphabet
+
+dict="/usr/share/dict/words"
+
+words=$(tr ' ' '\n' < "$file" | tr -d '[:punct:]' | tr 'A-Z' 'a-z' | sort -u)
+
+count=0
+
+while read -r word; do
+    decoded=""
+
+    length=$(echo -n "$word" | wc -c)
+
+    for ((i=0; i<length; i++)); do
+        letter=$(echo -n "$word" | cut -c $((i+1)))
+
+        letter=$(echo "$letter" | tr 'a-z' 'A-Z')
+
+        position=$(grep "^$letter " alphabet | cut -d' ' -f2)
+
+        new_position=$(( (position + k - 1) % 26 + 1 ))
+
+        new_letter=$(grep " $new_position$" alphabet | cut -d' ' -f1)
+
+        decoded="$decoded$new_letter"
+    done
+
+    decoded=$(echo "$decoded" | tr 'A-Z' 'a-z')
+
+    if grep -qi "^$decoded$" "$dict"; then
+        count=$((count + 1))
+    fi
+
+done <<< "$words"
+
+echo "$count"
+
+rm alphabet
+//////////////////////////////////////////////////////////
+#!/bin/bash
+
+if [[ $# -ne 2 ]]; then
     exit 1
 fi
 
