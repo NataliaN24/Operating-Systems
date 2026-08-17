@@ -19,7 +19,7 @@ if [[ "$user" == "root" ]]; then
         chgrp "$groupId" "$file"
 
         if [[ -d "$file" ]]; then
-            chmod 2770 "$file"
+            chmod 2770 "$file"  #we have 2 in the beginning because of setgid -> new file will inherit that group 
         elif [[ -f "$file" ]]; then
             chmod ug+rw,o-rwx "$file"
         fi
