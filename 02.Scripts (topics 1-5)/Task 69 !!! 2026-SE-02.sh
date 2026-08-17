@@ -11,30 +11,27 @@ if [[ ! -f "$file" ]]; then
 fi
 
 cmd=""
+args=""
+envs=""
 workdir=""
 
 while read -r line; do
 
-    # Премахваме коментара
     line=$(echo "$line" | sed 's/#.*//')
 
     if [[ -z "$line" ]]; then
         continue
     fi
 
-    # CMD
     if [[ "$line" == CMD* ]]; then
         cmd=$(echo "$line" | cut -d' ' -f2-)
 
-    # ARGS
     elif [[ "$line" == ARGS* ]]; then
-        args=$(echo "$line" | sed 's/^ARGS //' | sed 's/^\[//' | sed 's/\]$//' | sed 's/", "/\n/g' | tr -d '"')
+        args=$(echo "$line" | sed 's/^ARGS //' | sed 's/^\[//' | sed 's/\]$//' | tr ',' '\n' | tr -d '"')
 
-    # ENV
     elif [[ "$line" == ENV* ]]; then
-        envs=$(echo "$line" | sed 's/^ENV //' | sed 's/^{//' | sed 's/}$//' | sed 's/", "/\n/g' | tr -d '"')
+        envs=$(echo "$line" | sed 's/^ENV //' | sed 's/^{//' | sed 's/}$//' | tr ',' '\n' | tr -d '"')
 
-    # WORKDIR
     elif [[ "$line" == WORKDIR* ]]; then
         workdir=$(echo "$line" | cut -d' ' -f2-)
     fi
@@ -45,22 +42,20 @@ if [[ -n "$workdir" ]]; then
     cd "$workdir" || exit 3
 fi
 
-echo "$args" > args.tmp
-echo "$envs" > envs.tmp
-
 command="$cmd"
 
 while read -r arg; do
+    arg=$(echo "$arg" | sed 's/^ *//')
     command="$command \"$arg\""
-done < args.tmp
+done <<< "$args"
 
 while read -r env; do
+    env=$(echo "$env" | sed 's/^ *//')
+    env=$(echo "$env" | sed 's/:/=/')
     command="$env $command"
-done < envs.tmp
+done <<< "$envs"
 
 eval "$command"
-
-rm args.tmp envs.tmp
 ////////////////////////////////////////////////////////////////////
 #!/bin/bash
 
