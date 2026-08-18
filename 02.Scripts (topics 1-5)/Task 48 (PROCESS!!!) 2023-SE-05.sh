@@ -1,5 +1,94 @@
 #!/bin/bash
 
+sums=$(mktemp)
+counts=$(mktemp)
+total=0
+
+while true; do
+
+    # Изчистваме sums за новото поглеждане
+    > "$sums"
+
+    # Вземаме comm и rss на всички процеси
+    ps -eo comm,rss | tail -n +2 | while read -r comm rss; do
+
+        # Проверяваме дали вече сме срещали тази команда
+        old=$(grep "^$comm " "$sums" | cut -d ' ' -f2)
+
+        if [[ -z "$old" ]]; then
+
+            # Ако я няма, записваме нейния RSS
+            echo "$comm $rss" >> "$sums"
+
+        else
+
+            # Ако я има, събираме стария и новия RSS
+            new=$((old + rss))
+
+            # Заменяме стария RSS с новия
+            sed -i "s/^$comm $old$/$comm $new/" "$sums"
+        fi
+
+    done
+
+    # Направили сме още едно поглеждане
+    total=$((total + 1))
+
+    found=0
+
+    # Проверяваме кои команди са над 65536
+    while read -r comm rss; do
+
+        if [[ "$rss" -gt 65536 ]]; then
+
+            found=1
+
+            # Колко пъти досега тази команда е била над 65536
+            old=$(grep "^$comm " "$counts" | cut -d ' ' -f2)
+
+            if [[ -z "$old" ]]; then
+
+                # Първи път
+                echo "$comm 1" >> "$counts"
+
+            else
+
+                # Увеличаваме брояча
+                new=$((old + 1))
+
+                sed -i "s/^$comm $old$/$comm $new/" "$counts"
+            fi
+
+        fi
+
+    done < "$sums"
+
+    # Ако няма нито една команда над 65536, спираме
+    if [[ "$found" -eq 0 ]]; then
+        break
+    fi
+
+    sleep 1
+
+done
+
+
+# Извеждаме командите, които са били
+# над 65536 в поне половината поглеждания
+
+while read -r comm count; do
+
+    if [[ $((count * 2)) -ge "$total" ]]; then
+        echo "$comm"
+    fi
+
+done < "$counts"
+
+
+rm "$sums" "$counts"
+//////////////////////////////////////////////////////////
+#!/bin/bash
+
 limit=65536
 totalChecks=0
 
