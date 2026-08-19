@@ -1,5 +1,100 @@
 #!/bin/bash
 
+user=$(whoami)
+
+if [[ "$user" != "root" ]];then
+    exit 1
+fi
+
+nonRoot=$(mktemp)
+
+cat /etc/passwd | while read -r line;do
+    criteriaFulfilled=0
+
+    user=$(echo "$line" | cut -d ':' -f1)
+    id=$(echo "$line" | cut -d ':' -f3)
+    home=$(echo "$line" | cut -d ':' -f6)
+
+    if [[ "$user" == "root" ]];then
+        continue
+    fi
+
+    if [[ ! -d "$home" ]];then
+        criteriaFulfilled=1
+    else
+        homeOwner=$(stat -c '%u' "$home")
+        write=$(stat -c '%A' "$home" | cut -c3)
+
+        if [[ "$id" != "$homeOwner" ]];then
+            criteriaFulfilled=1
+        elif [[ "$write" != "w" ]];then
+            criteriaFulfilled=1
+        fi
+    fi
+
+    if [[ "$criteriaFulfilled" -eq 1 ]];then
+        echo "$user" >> "$nonRoot"
+    fi
+done
+
+
+rootProcesses=$(mktemp)
+rootTotal=0
+
+ps -eo user=,rss= | grep "^root " > "$rootProcesses"
+
+while read -r user rss;do
+    rootTotal=$((rootTotal + rss))
+done < "$rootProcesses"
+
+
+tempRes=$(mktemp)
+
+ps -eo user=,pid=,rss= > "$tempRes"
+
+userTotals=$(mktemp)
+
+while read -r user pid rss;do
+
+    found=$(grep -x "$user" "$nonRoot")
+
+    if [[ -z "$found" ]];then
+        continue
+    fi
+
+    old=$(grep "^$user " "$userTotals" | cut -d ' ' -f2)
+
+    if [[ -z "$old" ]];then
+        echo "$user $rss" >> "$userTotals"
+    else
+        totalRss=$((old + rss))
+
+        sed -i "s/^$user .*/$user $totalRss/" "$userTotals"
+    fi
+
+done < "$tempRes"
+
+
+while read -r user totalRss;do
+
+    if [[ "$totalRss" -gt "$rootTotal" ]];then
+
+        grep "^$user " "$tempRes" | while read -r u pid rss;do
+            kill "$pid"
+        done
+
+    fi
+
+done < "$userTotals"
+
+
+rm "$nonRoot"
+rm "$rootProcesses"
+rm "$tempRes"
+rm "$userTotals"
+//////////////////////////////////////
+#!/bin/bash
+
 if [[ "$(whoami)" != "root" ]]; then
     exit 1
 fi
