@@ -1,5 +1,45 @@
 #!/bin/bash
 
+dir="$1"
+
+if [[ ! -d "$dir" ]]; then
+    exit 1
+fi
+
+symLinks=$(mktemp)
+
+find "$dir" -type l | while read -r file; do
+
+    target=$(readlink "$file")
+
+    echo "$file $target" >> "$symLinks"
+
+done
+
+while read -r file target; do
+
+    targetPath=$(realpath "$(dirname "$file")/$target")
+    dirPath=$(realpath "$dir")
+
+    if [[ "$targetPath" == "$dirPath/"* ]]; then
+
+        path=$(realpath --relative-to="$(dirname "$file")" "$targetPath")
+
+    else
+
+        path="$targetPath"
+
+    fi
+
+    rm "$file"
+    ln -s "$path" "$file"
+
+done < "$symLinks"
+
+rm "$symLinks"
+//////////////////////////////////////////////
+#!/bin/bash
+
 if [[ "$#" -ne 1 ]]; then
     exit 1
 fi
