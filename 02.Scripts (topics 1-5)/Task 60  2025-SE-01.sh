@@ -1,5 +1,39 @@
 #!/bin/bash
 
+config="$1"
+input="$2"
+
+listener="-no-listener"
+visitor=""
+
+name=$(basename "$input")
+name="${name%.*}"
+
+while read -r line; do
+
+    lang=$(echo "$line" | cut -d ' ' -f1)
+
+    dir=$(echo "$line" | grep -o "'[^']*'" | tr -d "'")
+
+    listener="-no-listener"
+    visitor=""
+
+    if echo "$line" | grep -q "listener"; then
+        listener=""
+    fi
+
+    if echo "$line" | grep -q "visitor"; then
+        visitor="-visitor"
+    fi
+
+    output="$dir/$name"
+
+    antlr4 -Dlanguage="$lang" $listener $visitor -o "$output" "$input"
+
+done < "$config"
+//////////////////////////////////////////
+#!/bin/bash
+
 if [[ $# -ne 2 ]]; then
     echo "Usage: $0 <config> <input>"
     exit 1
