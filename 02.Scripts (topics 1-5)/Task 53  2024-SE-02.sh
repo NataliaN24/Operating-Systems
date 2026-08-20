@@ -1,5 +1,73 @@
 #!/bin/bash
 
+if [[ -n "$PASSWD" && -f "$PASSWD" ]]; then
+    localFile="$PASSWD"
+else
+    localFile="/etc/passwd"
+fi
+
+prevUser=$(mktemp)
+localUsers=$(mktemp)
+
+while read -r line; do
+    uid=$(echo "$line" | cut -d ':' -f3)
+    username=$(echo "$line" | cut -d ':' -f1)
+
+    if [[ "$uid" -ge 1000 ]]; then
+        echo "$username" >> "$localUsers"
+    fi
+done < "$localFile"
+
+
+./occ user:list |
+cut -d ':' -f1 |
+tr -d '-' |
+sed 's/^ *//; s/ *$//' > "$prevUser"
+
+
+# Обработваме локалните потребители
+while read -r user; do
+
+    if ! grep -Fxq "$user" "$prevUser"; then
+        ./occ user:add "$user"
+
+    else
+        isEnabled=$(./occ user:info "$user" |
+        grep "enabled: " |
+        cut -d ':' -f2 |
+        sed 's/^ *//; s/ *$//')
+
+        if [[ "$isEnabled" == "false" ]]; then
+            ./occ user:enable "$user"
+        fi
+    fi
+
+done < "$localUsers"
+
+
+# Обработваме PrevCloud потребителите
+while read -r user; do
+
+    if ! grep -Fxq "$user" "$localUsers"; then
+
+        isEnabled=$(./occ user:info "$user" |
+        grep "enabled: " |
+        cut -d ':' -f2 |
+        sed 's/^ *//; s/ *$//')
+
+        if [[ "$isEnabled" == "true" ]]; then
+            ./occ user:disable "$user"
+        fi
+    fi
+
+done < "$prevUser"
+
+
+rm "$prevUser"
+rm "$localUsers"
+///////////////////////////////////
+#!/bin/bash
+
 localFile="/etc/passwd"
 
 if [[ -n "$PASSWD" ]]; then
