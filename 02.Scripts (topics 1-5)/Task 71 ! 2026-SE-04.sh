@@ -29,6 +29,23 @@ rm "$tmpfile"
 //b) !!!!
 #!/bin/bash
 
+dir="$1"
+
+if [[ ! -d "$dir" ]]; then
+    exit 1
+fi
+
+dir=$(realpath "$dir")
+fake=$(realpath "./fake-commands")
+
+ALLOWED_DIR="$dir" PATH="$fake:$PATH" bash
+
+
+
+
+/////////////////////////////////
+#!/bin/bash
+
 if [[ "$#" -ne 1 ]]; then
     exit 1
 fi
