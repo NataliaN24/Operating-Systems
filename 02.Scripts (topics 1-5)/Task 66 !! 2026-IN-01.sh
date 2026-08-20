@@ -1,5 +1,80 @@
 #!/bin/bash
 
+dir="$1"
+history="$2"
+
+if [[ ! -d "$dir" ]]; then
+    exit 1
+fi
+
+if [[ ! -f "$history" ]]; then
+    exit 1
+fi
+
+allFiles=$(mktemp)
+historyPosition=$(mktemp)
+
+find "$dir" -type f |
+    grep -E '/Forecast_[0-9]+\.[0-9]+\.[0-9]{4}_[0-9]+\.parquet$' > "$allFiles"
+
+
+level=0
+
+while read -r hash; do
+    level=$((level + 1))
+    echo "$hash $level" >> "$historyPosition"
+done < "$history"
+
+
+while read -r file; do
+
+    date=$(echo "$file" |
+        grep -oE '[0-9]+\.[0-9]+\.[0-9]{4}')
+
+    filesForDate=$(mktemp)
+
+    grep -E "Forecast_${date}_[0-9]+\.parquet$" "$allFiles" > "$filesForDate"
+
+    count=$(wc -l < "$filesForDate")
+
+    if [[ "$count" -gt 1 ]]; then
+
+        candidates=$(mktemp)
+
+        while read -r duplicateFile; do
+
+            hash=$(sha1sum "$duplicateFile" | cut -d ' ' -f1)
+
+            level=$(grep "^$hash " "$historyPosition" |
+                cut -d ' ' -f2)
+
+            if [[ -z "$level" ]]; then
+                exit 1
+            fi
+
+            echo "$level $duplicateFile" >> "$candidates"
+
+        done < "$filesForDate"
+
+        sort -nr "$candidates" |
+            tail -n +2 |
+            cut -d ' ' -f2- |
+            while read -r fileToDelete; do
+                rm "$fileToDelete"
+            done
+
+        rm "$candidates"
+    fi
+
+    rm "$filesForDate"
+
+done < "$allFiles"
+
+rm "$allFiles"
+rm "$historyPosition"
+////////////////////////////////////
+#!/bin/bash
+
 if [[ $# -ne 2 ]]; then
     exit 1
 fi
