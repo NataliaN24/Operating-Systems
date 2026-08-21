@@ -1,5 +1,69 @@
 #!/bin/bash
 
+file="/proc/acpi/wakeup"
+config="$1"
+
+if [[ $# -ne 1 ]]; then
+    echo "Usage: $0 config_file" >&2
+    exit 1
+fi
+
+if [[ ! -f "$config" ]]; then
+    echo "Error: configuration file does not exist." >&2
+    exit 2
+fi
+
+if [[ ! -r "$config" ]]; then
+    echo "Error: configuration file cannot be read." >&2
+    exit 3
+fi
+
+if [[ ! -r "$file" || ! -w "$file" ]]; then
+    echo "Error: cannot access $file." >&2
+    exit 4
+fi
+
+while read -r line; do
+
+    trimmed=$(echo "$line" | sed 's/#.*//' | tr -s '[:space:]' ' ' | sed 's/^ *//; s/ *$//')
+
+    if [[ -z "$trimmed" ]]; then
+        continue
+    fi
+
+    device=$(echo "$trimmed" | cut -d ' ' -f1)
+    state=$(echo "$trimmed" | cut -d ' ' -f2)
+
+    if ! echo "$device" | grep -Eq '^[A-Z0-9]{1,4}$'; then
+        echo "Error: invalid device name: $device" >&2
+        exit 5
+    fi
+
+    if [[ "$state" != "disabled" && "$state" != "enabled" ]]; then
+        echo "Error: invalid state: $state" >&2
+        exit 6
+    fi
+
+    foundDevice=$(grep -E "^$device[[:space:]]" "$file")
+
+    if [[ -z "$foundDevice" ]]; then
+        echo "Warning: device $device does not exist." >&2
+        continue
+    fi
+
+    foundDeviceState=$(echo "$foundDevice" | tr -s '[:space:]' ' ' | cut -d ' ' -f3 | tr -d '*')
+
+    if [[ "$foundDeviceState" == "$state" ]]; then
+        continue
+    fi
+
+    echo "$device" > "$file"
+
+done < "$config"
+
+/////////////////////////
+#!/bin/bash
+
 if [[ $# -ne 1 ]]; then
     echo "Usage: $0 <config-file>" >&2
     exit 1
