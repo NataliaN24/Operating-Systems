@@ -1,5 +1,60 @@
 #!/bin/bash
 
+dir="$1"
+
+if [[ ! -d "$dir" ]]; then
+    exit 1
+fi
+
+initialState=$(df -B1 "$dir" | tail -1 | tr -s ' ' | cut -d ' ' -f4)
+
+allFiles=$(mktemp)
+
+find "$dir" -type f -exec sha256sum {} \; > "$allFiles"
+
+deduplicated=0
+
+while read -r hash file; do
+
+    filesWithTheSameHash=$(grep "^$hash " "$allFiles")
+    howMany=$(echo "$filesWithTheSameHash" | wc -l)
+
+    if [[ "$howMany" -eq 1 ]]; then
+        continue
+    fi
+
+    target="$file"
+    deduplicated=$((deduplicated + 1))
+
+    while read -r h f; do
+
+        if [[ "$target" == "$f" ]]; then
+            continue
+        fi
+
+        rm "$f"
+        ln "$target" "$f"
+
+    done <<< "$filesWithTheSameHash"
+
+    # махаме обработените файлове от списъка,
+    # за да не обработим същата група отново
+    sed -i "/^$hash /d" "$allFiles"
+
+done < <(cat "$allFiles")
+
+currentState=$(df -B1 "$dir" | tail -1 | tr -s ' ' | cut -d ' ' -f4)
+
+freed=$((currentState - initialState))
+
+echo "Deduplicated groups: $deduplicated"
+echo "Freed bytes: $freed"
+
+rm "$allFiles"
+
+//////////////////////////////////////////////////
+#!/bin/bash
+
 if [[ $# -ne 1 ]]; then
     exit 1
 fi
