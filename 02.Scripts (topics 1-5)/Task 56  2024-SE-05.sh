@@ -1,3 +1,63 @@
+comm="$1"
+file="$2"
+
+result=$("$comm")
+exitcode=$?
+
+if [[ "$exitcode" -ne 0 ]]; then
+    exit 3
+fi
+
+# format:
+# 2026-08-22-Saturday-21:00 value
+
+now=$(date '+%Y-%m-%d-%A-%H:%M')
+
+day=$(echo "$now" | cut -d '-' -f4)
+hour=$(echo "$now" | cut -d '-' -f5 | cut -d ':' -f1)
+
+sum=0
+cnt=0
+
+if [[ -f "$file" ]]; then
+    while read -r line; do
+
+        dayy=$(echo "$line" | cut -d '-' -f4)
+        hourr=$(echo "$line" | cut -d '-' -f5 | cut -d ':' -f1)
+
+        if [[ "$dayy" == "$day" && "$hourr" == "$hour" ]]; then
+            value=$(echo "$line" | cut -d ' ' -f2)
+
+            sum=$(echo "$sum + $value" | bc)
+            cnt=$((cnt + 1))
+        fi
+
+    done < "$file"
+fi
+
+# Записваме текущото измерване
+echo "$now $result" >> "$file"
+
+# Няма исторически стойности
+if [[ "$cnt" -eq 0 ]]; then
+    exit 0
+fi
+
+avg=$(echo "scale=10; $sum / $cnt" | bc)
+
+upper=$(echo "2 * $avg" | bc)
+lower=$(echo "$avg / 2" | bc)
+
+abnormal=$(echo "$result > $upper || $result < $lower" | bc)
+
+if [[ "$abnormal" -eq 1 ]]; then
+    echo "$(date '+%Y-%m-%d %H:') $result abnormal"
+    exit 2
+fi
+
+exit 0
+
+//////////////////////////////////////////
 #!/bin/bash
 
 cmd="$1"
