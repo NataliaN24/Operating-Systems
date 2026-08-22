@@ -1,5 +1,84 @@
 #!/bin/bash
 
+dir="$1"
+
+# Проверка за директория
+if [[ ! -d "$dir" ]]; then
+    exit 1
+fi
+
+candidates=$(mktemp)
+data=$(mktemp)
+files=$(mktemp)
+
+# Общо количество файлове
+totalFiles=$(find "$dir" -type f | wc -l)
+
+# За всеки файл:
+# word count
+# Например: you 5
+find "$dir" -type f | while read -r file; do
+    grep -Eo '[a-z]+' "$file" |
+    sort |
+    uniq -c |
+    while read -r count word; do
+        echo "$word $count" >> "$data"
+    done
+done
+
+# Списък с всички различни думи
+cut -d ' ' -f1 "$data" | sort -u > "$files"
+
+# За всяка дума
+while read -r word; do
+
+    total=0
+    fileCount=0
+
+    # Намираме всички срещания на тази дума
+    grep "^$word " "$data" |
+    while read -r w count; do
+        echo "$count"
+    done > "$candidates"
+
+    # Общо срещания
+    while read -r count; do
+        total=$((total + count))
+    done < "$candidates"
+
+    # В колко файла думата се среща поне 3 пъти
+    # Тук обаче data не пази отделните файлове,
+    # затова трябва да се направи отново проверка по файлове.
+
+    fileCount=0
+
+    find "$dir" -type f | while read -r file; do
+        count=$(grep -Eo '[a-z]+' "$file" | grep "^$word$" | wc -l)
+
+        if [[ "$count" -ge 3 ]]; then
+            echo 1
+        fi
+    done > "$candidates"
+
+    fileCount=$(wc -l < "$candidates")
+
+    # Проверка:
+    # fileCount >= totalFiles / 2
+    half=$((totalFiles / 2))
+
+    if [[ "$fileCount" -ge "$half" ]]; then
+        echo "$total $word"
+    fi
+
+done < "$files" |
+sort -nr |
+head -10
+
+rm -f "$candidates" "$data" "$files"
+
+/////////////////////////////////////////
+#!/bin/bash
+
 if [[ $# -ne 1 ]]; then
     exit 1
 fi
