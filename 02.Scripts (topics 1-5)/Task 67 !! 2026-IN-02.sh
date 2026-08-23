@@ -1,6 +1,95 @@
 #!/bin/bash
 
 if [[ $# -ne 2 ]]; then
+    echo "error"
+    exit 1
+fi
+
+input="$1"
+k="$2"
+
+if [[ ! -f "$input" ]]; then
+    echo "error"
+    exit 1
+fi
+
+if [[ ! "$k" =~ ^[0-9]+$ ]]; then
+    echo "error"
+    exit 2
+fi
+
+dict="/usr/share/dict/words"
+
+if [[ ! -f "$dict" ]]; then
+    echo "error"
+    exit 1
+fi
+
+decoded=$(mktemp)
+level=$(mktemp)
+unique=$(mktemp)
+
+alpha="A B C D E F G H I J K L M N O P Q R S T U V W X Y Z"
+
+cnt=1
+
+for letter in $alpha; do
+    echo "$letter $cnt" >> "$level"
+    cnt=$((cnt + 1))
+done
+
+while read -r line; do
+
+    words=$(echo "$line" | grep -Eo '[A-Z]+')
+
+    while read -r word; do
+
+        len=$(echo -n "$word" | wc -c)
+
+        i=1
+
+        while [[ "$i" -le "$len" ]]; do
+
+            letter=$(echo -n "$word" | cut -c "$i")
+
+            currentPos=$(grep "^$letter " "$level" | cut -d ' ' -f2)
+
+            newPos=$(( (currentPos - 1 + k) % 26 + 1 ))
+
+            newLetter=$(grep " $newPos$" "$level" | cut -d ' ' -f1)
+
+            echo -n "$newLetter" >> "$decoded"
+
+            i=$((i + 1))
+        done
+
+        echo >> "$decoded"
+
+    done <<< "$words"
+
+done < "$input"
+
+sort -u "$decoded" > "$unique"
+
+howMany=0
+
+while read -r word; do
+
+    w=$(echo "$word" | tr 'A-Z' 'a-z')
+
+    if grep -Fxi "$w" "$dict" > /dev/null; then
+        howMany=$((howMany + 1))
+    fi
+
+done < "$unique"
+
+echo "$howMany"
+
+rm -f "$decoded" "$level" "$unique"
+///////////////////////////////////
+#!/bin/bash
+
+if [[ $# -ne 2 ]]; then
     exit 2
 fi
 
