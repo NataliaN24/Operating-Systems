@@ -7,6 +7,146 @@ if [[ $# -ne 1 ]]; then
 fi
 
 if [[ ! -d "$dir" ]]; then
+    exit 1
+fi
+
+all=$(mktemp)
+
+find "$dir" -type f -printf "%p %i\n" |
+while read -r file inode; do
+    hash=$(sha256sum "$file" | cut -d ' ' -f1)
+    echo "$file $hash $inode" >> "$all"
+done
+
+processedHashes=$(mktemp)
+
+while read -r file hash inode; do
+
+    # Ако този hash вече е обработен, прескачаме
+    if grep -Fxq "$hash" "$processedHashes"; then
+        continue
+    fi
+
+    echo "$hash" >> "$processedHashes"
+
+    # Всички файлове със същото съдържание
+    sameHash=$(grep " $hash " "$all")
+
+    # Ще пазим информация дали има hardlink група
+    hasHardLinks=0
+    hasSingleFiles=0
+
+    inodes=$(echo "$sameHash" | awk '{print $3}' | sort -u)
+
+    while read -r currentInode; do
+
+        [[ -z "$currentInode" ]] && continue
+
+        group=$(echo "$sameHash" | awk -v inode="$currentInode" '$3 == inode')
+
+        groupCount=$(echo "$group" | wc -l)
+
+        if [[ "$groupCount" -gt 1 ]]; then
+            hasHardLinks=1
+        else
+            hasSingleFiles=1
+        fi
+
+    done <<< "$inodes"
+
+    # СЛУЧАЙ 1:
+    # Има само отделни файлове
+    if [[ "$hasSingleFiles" -eq 1 && "$hasHardLinks" -eq 0 ]]; then
+
+        first=1
+
+        while read -r f h i; do
+
+            if [[ "$first" -eq 1 ]]; then
+                first=0
+            else
+                echo "$f"
+            fi
+
+        done <<< "$sameHash"
+
+    # СЛУЧАЙ 2:
+    # Само hardlink групи
+    elif [[ "$hasSingleFiles" -eq 0 && "$hasHardLinks" -eq 1 ]]; then
+
+        while read -r currentInode; do
+
+            [[ -z "$currentInode" ]] && continue
+
+            group=$(echo "$sameHash" |
+                awk -v inode="$currentInode" '$3 == inode')
+
+            groupCount=$(echo "$group" | wc -l)
+
+            if [[ "$groupCount" -gt 1 ]]; then
+                first=1
+
+                while read -r f h i; do
+                    if [[ "$first" -eq 1 ]]; then
+                        first=0
+                    else
+                        echo "$f"
+                    fi
+                done <<< "$group"
+            fi
+
+        done <<< "$inodes"
+
+    # СЛУЧАЙ 3:
+    # Има и hardlink групи, и отделни файлове
+    else
+
+        while read -r currentInode; do
+
+            [[ -z "$currentInode" ]] && continue
+
+            group=$(echo "$sameHash" |
+                awk -v inode="$currentInode" '$3 == inode')
+
+            groupCount=$(echo "$group" | wc -l)
+
+            if [[ "$groupCount" -eq 1 ]]; then
+
+                # Отделният файл се изтрива
+                echo "$group" | cut -d ' ' -f1
+
+            else
+
+                # От hardlink групата махаме едно име
+                first=1
+
+                while read -r f h i; do
+                    if [[ "$first" -eq 1 ]]; then
+                        first=0
+                    else
+                        echo "$f"
+                    fi
+                done <<< "$group"
+
+            fi
+
+        done <<< "$inodes"
+
+    fi
+
+done < "$all"
+
+rm -f "$all" "$processedHashes"
+//////////////////////////
+#!/bin/bash
+
+dir="$1"
+
+if [[ $# -ne 1 ]]; then
+    exit 1
+fi
+
+if [[ ! -d "$dir" ]]; then
     exit 2
 fi
 
