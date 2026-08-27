@@ -1,4 +1,122 @@
-```cpp
+#include <unistd.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include <string.h>
+#include <fcntl.h>
+#include <err.h>
+
+int main(int argc, char* argv[])
+{
+    if (argc != 4) {
+        errx(1, "usage");
+    }
+
+    int dic = open(argv[2], O_RDONLY);
+    if (dic < 0) {
+        err(1, "open dic");
+    }
+
+    int index = open(argv[3], O_RDONLY);
+    if (index < 0) {
+        err(1, "open index");
+    }
+
+    off_t fsize = lseek(index, 0, SEEK_END);
+    if (fsize < 0) {
+        err(1, "lseek");
+    }
+
+    if (fsize % sizeof(uint32_t) != 0) {
+        errx(1, "invalid index file");
+    }
+
+    int n = fsize / sizeof(uint32_t);
+
+    int left = 0;
+    int right = n - 1;
+
+    while (left <= right) {
+
+        int mid = (left + right) / 2;
+
+        uint32_t pos;
+
+        if (lseek(index,
+                  mid * sizeof(uint32_t),
+                  SEEK_SET) < 0) {
+            err(1, "lseek index");
+        }
+
+        if (read(index, &pos, sizeof(pos)) != sizeof(pos)) {
+            errx(1, "read index");
+        }
+
+        // pos е byte position в dictionary файла
+        // +1, защото на pos има '\0'
+        if (lseek(dic, pos + 1, SEEK_SET) < 0) {
+            err(1, "lseek dictionary");
+        }
+
+        char word[64];
+        char letter;
+        int len = 0;
+
+        while (read(dic, &letter, sizeof(letter)) == sizeof(letter)) {
+
+            if (letter == '\n') {
+                word[len] = '\0';
+                break;
+            }
+
+            word[len++] = letter;
+        }
+
+        int cmp = strcmp(argv[1], word);
+
+        if (cmp == 0) {
+
+            // В момента сме точно след '\n',
+            // т.е. в началото на описанието
+
+            char b;
+
+            while (read(dic, &b, sizeof(b)) == sizeof(b)) {
+
+                if (b == '\0') {
+                    break;
+                }
+
+                if (write(1, &b, sizeof(b)) != sizeof(b)) {
+                    err(1, "write");
+                }
+            }
+
+            close(dic);
+            close(index);
+            return 0;
+        }
+
+        if (cmp < 0) {
+            // търсената дума е преди тази
+            right = mid - 1;
+        } else {
+            // търсената дума е след тази
+            left = mid + 1;
+        }
+    }
+
+    const char msg[] = "Word not found\n";
+
+    if (write(1, msg, sizeof(msg) - 1) != sizeof(msg) - 1) {
+        err(1, "write");
+    }
+
+    close(dic);
+    close(index);
+
+    return 0;
+}
+////////////////////////
 #include <unistd.h>
 #include <fcntl.h>
 #include <stdint.h>
