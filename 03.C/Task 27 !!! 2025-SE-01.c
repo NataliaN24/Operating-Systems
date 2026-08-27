@@ -1,4 +1,198 @@
 #include <unistd.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include <string.h>
+#include <fcntl.h>
+#include <err.h>
+
+typedef struct {
+    uint64_t id;
+    uint8_t len;
+    char text[256];
+    char role[256];
+} rec;
+
+int compare(const void* a, const void* b)
+{
+    const rec* r1 = a;
+    const rec* r2 = b;
+
+    if (r1->id < r2->id) {
+        return -1;
+    }
+
+    if (r1->id > r2->id) {
+        return 1;
+    }
+
+    return 0;
+}
+
+int main(int argc, char* argv[])
+{
+    if (argc < 2 || argc > 21) {
+        errx(1, "usage: ./main file1 file2 ...");
+    }
+
+    int n = argc - 1;
+
+    /*
+     * Максимумът е 20 файла.
+     * Не знаем колко records има във всеки,
+     * затова динамично увеличаваме масива.
+     */
+    rec* records = NULL;
+    int count = 0;
+    int capacity = 0;
+
+    for (int i = 0; i < n; i++) {
+
+        int fd = open(argv[i + 1], O_RDONLY);
+
+        if (fd < 0) {
+            err(1, "open");
+        }
+
+        /*
+         * Четем header.
+         */
+        rec header;
+
+        if (read(fd, &header.id, sizeof(header.id))
+            != sizeof(header.id)) {
+            errx(1, "cannot read header id");
+        }
+
+        if (read(fd, &header.len, sizeof(header.len))
+            != sizeof(header.len)) {
+            errx(1, "cannot read header length");
+        }
+
+        if (read(fd, header.text, header.len)
+            != header.len) {
+            errx(1, "cannot read role");
+        }
+
+        header.text[header.len] = '\0';
+
+        /*
+         * Проверяваме header ID.
+         */
+        if (header.id != 133742) {
+            errx(1, "invalid header");
+        }
+
+        /*
+         * Четем всички реплики от този файл.
+         */
+        while (1) {
+
+            rec current;
+
+            ssize_t bytes = read(fd,
+                                 &current.id,
+                                 sizeof(current.id));
+
+            if (bytes == 0) {
+                break;
+            }
+
+            if (bytes != sizeof(current.id)) {
+                errx(1, "invalid record");
+            }
+
+            if (read(fd,
+                     &current.len,
+                     sizeof(current.len))
+                != sizeof(current.len)) {
+                errx(1, "invalid record");
+            }
+
+            if (read(fd,
+                     current.text,
+                     current.len)
+                != current.len) {
+                errx(1, "invalid record");
+            }
+
+            current.text[current.len] = '\0';
+
+            /*
+             * Записваме ролята към репликата.
+             */
+            strcpy(current.role, header.text);
+
+            /*
+             * Ако масивът е пълен,
+             * увеличаваме размера му.
+             */
+            if (count == capacity) {
+
+                if (capacity == 0) {
+                    capacity = 10;
+                } else {
+                    capacity *= 2;
+                }
+
+                records = realloc(records,
+                                  capacity * sizeof(rec));
+
+                if (records == NULL) {
+                    err(1, "realloc");
+                }
+            }
+
+            records[count] = current;
+            count++;
+        }
+
+        close(fd);
+    }
+
+    /*
+     * Сортираме всички реплики по време (id).
+     */
+    qsort(records,
+          count,
+          sizeof(rec),
+          compare);
+
+    /*
+     * Извеждаме резултата.
+     */
+    for (int i = 0; i < count; i++) {
+
+        if (write(1,
+                  records[i].role,
+                  strlen(records[i].role))
+            != (ssize_t)strlen(records[i].role)) {
+            err(1, "write");
+        }
+
+        if (write(1, ": ", 2) != 2) {
+            err(1, "write");
+        }
+
+        if (write(1,
+                  records[i].text,
+                  records[i].len)
+            != records[i].len) {
+            err(1, "write");
+        }
+
+        if (write(1, "\n", 1) != 1) {
+            err(1, "write");
+        }
+    }
+
+    free(records);
+
+    return 0;
+}
+
+
+//////////////////////////////////////////////
+#include <unistd.h>
 #include <fcntl.h>
 #include <stdint.h>
 #include <inttypes.h>
