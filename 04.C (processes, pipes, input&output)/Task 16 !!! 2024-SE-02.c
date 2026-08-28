@@ -4,6 +4,135 @@
 #include <stdlib.h>
 #include <err.h>
 
+int main(int argc, char *argv[])
+{
+    if (argc < 2 || argc > 11)
+    {
+        errx(1, "usage: %s program1 ... program10", argv[0]);
+    }
+
+    int n = argc - 1;
+
+    pid_t pids[10];
+    int done[10] = {0};
+
+    // Стартираме всички програми паралелно
+    for (int i = 0; i < n; i++)
+    {
+        pid_t pid = fork();
+
+        if (pid < 0)
+        {
+            err(1, "fork");
+        }
+
+        if (pid == 0)
+        {
+            execlp(argv[i + 1], argv[i + 1], (char *)NULL);
+            err(1, "execlp");
+        }
+
+        // parent
+        pids[i] = pid;
+    }
+
+    int finished = 0;
+
+    while (finished < n)
+    {
+        int status;
+
+        // Чакаме който и да е child
+        pid_t pid = waitpid(-1, &status, 0);
+
+        if (pid < 0)
+        {
+            err(1, "waitpid");
+        }
+
+        // Намираме коя програма е приключила
+        int index = -1;
+
+        for (int i = 0; i < n; i++)
+        {
+            if (pids[i] == pid)
+            {
+                index = i;
+                break;
+            }
+        }
+
+        // Процесът е убит от сигнал
+        if (WIFSIGNALED(status))
+        {
+            // Спираме всички останали работещи процеси
+            for (int i = 0; i < n; i++)
+            {
+                if (!done[i] && pids[i] != pid)
+                {
+                    kill(pids[i], SIGTERM);
+                }
+            }
+
+            // Изчакваме всички, които сме прекратили
+            for (int i = 0; i < n; i++)
+            {
+                if (!done[i] && pids[i] != pid)
+                {
+                    waitpid(pids[i], NULL, 0);
+                }
+            }
+
+            // index + 1, защото програмите са номерирани от 1
+            return index + 1;
+        }
+
+        // Процесът е завършил нормално
+        if (WIFEXITED(status))
+        {
+            int exit_status = WEXITSTATUS(status);
+
+            // Успешно приключване
+            if (exit_status == 0)
+            {
+                done[index] = 1;
+                finished++;
+            }
+            // Неуспешно приключване
+            else
+            {
+                pid_t new_pid = fork();
+
+                if (new_pid < 0)
+                {
+                    err(1, "fork");
+                }
+
+                if (new_pid == 0)
+                {
+                    execlp(argv[index + 1],
+                           argv[index + 1],
+                           (char *)NULL);
+
+                    err(1, "execlp");
+                }
+
+                // Запазваме PID-а на новия процес
+                pids[index] = new_pid;
+            }
+        }
+    }
+
+    return 0;
+}
+
+//////////////////////////////
+#include <unistd.h>
+#include <sys/wait.h>
+#include <signal.h>
+#include <stdlib.h>
+#include <err.h>
+
 int main(int argc, char* argv[])
 {
     if (argc < 2 || argc > 11) {
