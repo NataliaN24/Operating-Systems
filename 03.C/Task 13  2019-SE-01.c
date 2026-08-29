@@ -96,7 +96,7 @@ int main(int argc, char *argv[])
             int len = 0;
 
             // прост print без printf
-            len += sprintf(buf + len, "%u %u\n",
+            len = sprintf(buf + len, "%u %u\n",
                            ids[i], maxSession[i]);
 
             write(1, buf, len);
